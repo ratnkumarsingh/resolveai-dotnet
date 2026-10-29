@@ -6,7 +6,8 @@
   resolveai_reader gets only what the db_* tools need:
     VIEW SERVER STATE         DMVs (sessions, requests, waits) and the system_health / ring-buffer XE targets
     db_datareader             in ResolveAIDemo only; it cannot write, change settings or grant anything
-    SQLAgentReaderRole        read SQL Agent job history in msdb
+    SQLAgentReaderRole        see SQL Agent jobs in msdb (through sysjobs_view)
+    SELECT on sysjobhistory   read job outcomes; the role alone only allows that through procedures
 
   With Windows sign-in (driver msnodesqlv8) the MCP server connects as you and runs every query under
   EXECUTE AS LOGIN = 'resolveai_reader', so SQL Server itself enforces read-only even if you are an admin.
@@ -55,6 +56,7 @@ GO
 USE msdb;
 IF USER_ID(N'resolveai_reader') IS NULL CREATE USER resolveai_reader FOR LOGIN resolveai_reader;
 ALTER ROLE SQLAgentReaderRole ADD MEMBER resolveai_reader;
+GRANT SELECT ON dbo.sysjobhistory TO resolveai_reader;
 GO
 USE master;
 GO

@@ -23,9 +23,16 @@ END
 ELSE IF '$(ROLE)' = 'place_order'
 BEGIN
   SET LOCK_TIMEOUT 120000;  -- wait up to 2 minutes, then fail with error 1222 like the app did
-  BEGIN TRANSACTION;
-  UPDATE dbo.Orders SET Status = N'placed' WHERE OrderId = 1;
-  ROLLBACK;
-  PRINT 'Order update went through (the blocker had finished).';
+  BEGIN TRY
+    BEGIN TRANSACTION;
+    UPDATE dbo.Orders SET Status = N'placed' WHERE OrderId = 1;
+    ROLLBACK;
+    PRINT 'Order update went through (the blocker had finished).';
+  END TRY
+  BEGIN CATCH
+    -- A lock timeout ends only the statement, so without this the batch would carry on as if it worked.
+    IF @@TRANCOUNT > 0 ROLLBACK;
+    PRINT CONCAT('Order update failed with error ', ERROR_NUMBER(), ': ', ERROR_MESSAGE());
+  END CATCH
 END
 ELSE PRINT 'Pass -v ROLE=reconcile or -v ROLE=place_order';

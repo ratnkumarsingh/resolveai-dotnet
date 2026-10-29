@@ -120,10 +120,15 @@ export const SQL = {
 
   agentStatus: `SELECT status_desc FROM sys.dm_server_services WHERE servicename LIKE 'SQL Server Agent%'`,
 
+  // run_date is yyyymmdd and run_time hhmmss as ints; converted inline because msdb.dbo.agent_datetime
+  // needs EXECUTE, which the reader login doesn't have.
   failedJobs: `
-    SELECT TOP (50) j.name AS job_name, h.step_id, h.step_name, msdb.dbo.agent_datetime(h.run_date, h.run_time) AS run_at,
-           LEFT(h.message, 500) AS message
-      FROM msdb.dbo.sysjobhistory h JOIN msdb.dbo.sysjobs j ON j.job_id = h.job_id
-     WHERE h.run_status = 0 AND msdb.dbo.agent_datetime(h.run_date, h.run_time) BETWEEN @from AND @to
+    SELECT TOP (50) job_name, step_id, step_name, run_at, message FROM (
+      SELECT j.name AS job_name, h.step_id, h.step_name, LEFT(h.message, 500) AS message,
+             DATEADD(SECOND, h.run_time / 10000 * 3600 + h.run_time / 100 % 100 * 60 + h.run_time % 100,
+                     CAST(CAST(h.run_date AS char(8)) AS datetime2(0))) AS run_at
+        FROM msdb.dbo.sysjobhistory h JOIN msdb.dbo.sysjobs_view j ON j.job_id = h.job_id
+       WHERE h.run_status = 0 AND h.run_date > 0) f
+     WHERE run_at BETWEEN @from AND @to
      ORDER BY run_at DESC`,
 } as const;
