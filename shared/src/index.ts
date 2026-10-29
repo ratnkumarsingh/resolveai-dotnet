@@ -6,7 +6,7 @@ import { z } from "zod";
 // a citation and link it back to its source table.
 // ---------------------------------------------------------------------------
 
-export const EVIDENCE_KINDS = ["log", "dep", "met", "doc", "hist", "tl"] as const;
+export const EVIDENCE_KINDS = ["log", "dep", "met", "doc", "hist", "tl", "mcp"] as const;
 export type EvidenceKind = (typeof EVIDENCE_KINDS)[number];
 
 export function evidenceId(kind: EvidenceKind, id: string): string {
@@ -262,6 +262,44 @@ export interface Investigation {
   similar_incidents: SimilarIncidentResult[];
   evidence_count: number;
   trace: TraceStage[];
+  /** Every MCP tool call made for this run, in order: the baseline checks, then Claude's follow-ups. */
+  tool_calls: ToolCallRecord[];
+}
+
+// ---------------------------------------------------------------------------
+// Systems (one MCP server per system the agent can check)
+// ---------------------------------------------------------------------------
+
+export const SYSTEMS = ["database", "files", "deploys", "metrics"] as const;
+export type SystemKind = (typeof SYSTEMS)[number];
+
+/** One read-only tool call against a system. `ref` (mcp:N) is the evidence ID hypotheses cite. */
+export interface ToolCallRecord {
+  ref: string;
+  seq: number;
+  /** baseline = ResolveAI's fixed checks; follow_up = a call Claude chose to make. */
+  phase: "baseline" | "follow_up";
+  system: SystemKind;
+  server: string;
+  tool: string;
+  args: Record<string, unknown>;
+  ok: boolean;
+  summary: string;
+  rows: Record<string, unknown>[];
+  truncated: boolean;
+  duration_ms: number;
+  started_at: string;
+}
+
+export interface SystemStatus {
+  system: SystemKind;
+  server: string;
+  label: string;
+  /** disabled = turned off in mcp.config.json; error = configured but failed to start. */
+  status: "connected" | "error" | "disabled";
+  detail: string | null;
+  tools: { name: string; description: string }[];
+  checked_at: string;
 }
 
 /** One step of how an investigation was produced: timing plus the counts that step reported. */
@@ -311,4 +349,6 @@ export interface AppConfig {
   live_runs_today: number;
   demo_mode: boolean;
   data_source: "Demo dataset";
+  /** Most extra tool calls Claude may make per live investigation. */
+  max_follow_up_calls: number;
 }

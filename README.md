@@ -42,6 +42,42 @@ Open http://localhost:8787.
 - **Demo reset:** callers inside Docker arrive from the bridge network rather than loopback, so the compose file sets `DEMO_RESET_ANY_IP=true`. This is safe only because of the loopback-only port binding; don't publish the port more widely without removing it.
 - **Testing the container:** `BASE_URL=http://localhost:8787 npm run e2e` runs the browser test against it.
 
+## Systems the agent can check (MCP)
+
+Each system ResolveAI investigates has its own **read-only MCP server** in `mcp/`. The API starts them as child processes over stdio when it boots and lists them on the **Systems** page.
+
+| System | Server | Tools |
+| --- | --- | --- |
+| Database | `mcp/src/sqlserver` (SQL Server) | `db_health`, `db_blocking`, `db_long_queries`, `db_deadlocks`, `db_errors`, `db_space`, `db_failed_jobs` |
+| Files & logs | `mcp/src/files` | `files_search`, `files_tail`, `files_recent_changes`, `files_disk_space`, `files_check` |
+| Deploys & Git | `mcp/src/deploys` | `deploys_recent`, `deploys_change_summary` |
+| Metrics & host | `mcp/src/metrics` | `metrics_series`, `metrics_list`, `metrics_host` |
+
+**How an investigation uses them**
+1. **Baseline checks.** ResolveAI always runs the same checks for the incident's service and time window: errors and warnings in its log folders, recent deploys, its key metrics, and (if it has a database) health, blocking, errors and deadlocks.
+2. **Follow-up checks.** In live mode Claude may then make up to `MCP_MAX_FOLLOWUP_CALLS` (default 8) extra calls, through the SDK tool runner. The limit is enforced by ResolveAI, not by the model. Recorded mode replays a fixed set of follow-ups so the demo shows them for free.
+3. **Analysis.** Every result becomes an evidence item `mcp:N`. It is redacted like any other evidence, the findings must cite it, and model-written numbers are checked against it. Each call is stored (`tool_calls` table) and shown in *System checks* and in the trace.
+
+**Read-only by design**
+- No tool runs arbitrary SQL or shell commands; each is a fixed, parameterised check. The hub only offers tools marked `readOnlyHint` and ignores anything else a server exposes.
+- Files: only inside `files.allowed_roots`; `..` and symlink/junction escapes are refused, binary files are skipped, and output is capped.
+- Git: `execFile` with fixed arguments, repos only from config, commit IDs must be hex.
+- SQL Server: every query runs as `EXECUTE AS LOGIN = 'resolveai_reader'`, a login with only `VIEW SERVER STATE` and `db_datareader`. So the server enforces read-only even when you connect with an admin Windows account.
+- Each call has a time limit, a 24-hour window cap and a row/size cap. A server that fails to start shows as *Not working* and never stops the API.
+
+**Configure** in `mcp.config.json` (copy `mcp.config.example.json`; the example is used when there is none). It maps each service to its log folders, git repo, database and key metrics, and sets the allowed folders. Secrets stay in `.env`.
+
+**SQL Server (off by default).** On this machine (Windows sign-in, ODBC Driver 17):
+```bash
+sqlcmd -S localhost -E -C -i demo-systems/sqlserver/setup.sql      # demo DB, resolveai_reader, resolveai_errors XE session
+# then in mcp.config.json: "sqlserver": { "enabled": true, "driver": "msnodesqlv8", "execute_as": "resolveai_reader" }
+```
+To see a live blocking chain for INC-1046, run `demo-systems/sqlserver/scenario-blocking.sql` in two terminals (instructions are in the file; it rolls back), then investigate INC-1046. `teardown.sql` removes everything. In Docker, use `"driver": "tedious"` with a SQL login (`MSSQL_USER`/`MSSQL_PASSWORD`) over TCP.
+
+**Use them from Claude Code or Claude Desktop:** copy `.mcp.json.example` to `.mcp.json`.
+
+**Adding a system:** add a folder under `mcp/src/<name>/` with a `tools.ts` that registers tools through `readOnlyTool()` (it adds the timeout and error handling) and a `server.ts` entry. Then add it to `SERVER_DEFS` in `mcp/src/index.ts`, a colour in `web/src/components/systems.tsx`, and its baseline checks in `api/src/mcp/baseline.ts`.
+
 ## Environment
 
 Copy `.env.example` to `.env`. All variables are server-side; none use the `VITE_` prefix, so none can reach the browser bundle.
@@ -58,6 +94,10 @@ Copy `.env.example` to `.env`. All variables are server-side; none use the `VITE
 | `HOST` | `127.0.0.1` | Listen address. Docker uses `0.0.0.0` inside the container. |
 | `API_PORT` | `8787` | API port. |
 | `WEB_DIST` | empty | Serve a built web app from the API (set in Docker). |
+| `MCP_ENABLED` | `true` | Start the MCP systems and check them during investigations. |
+| `MCP_MAX_FOLLOWUP_CALLS` | `8` | Most extra tool calls Claude may make per investigation (0–20). |
+| `RESOLVEAI_MCP_CONFIG` | empty | Path to the MCP config; defaults to `mcp.config.json`, then the example. |
+| `MSSQL_USER` / `MSSQL_PASSWORD` | empty | SQL Server reader login for the `tedious` driver only. |
 
 ### LLM modes
 
@@ -109,12 +149,13 @@ web (React + Vite)  ──/api──▶  api (Fastify)  ──▶  SQLite (node:
 
 | Endpoint | Purpose |
 | --- | --- |
-| `GET /api/config` | Default mode, whether live is available, today's live usage |
+| `GET /api/config` | Default mode, whether live is available, today's live usage, follow-up call limit |
+| `GET /api/systems` | Each MCP system: status, detail and read-only tools |
 | `GET /api/incidents?status=&severity=&service=&q=&review=&page=&page_size=` | List and filter incidents; `review=pending` is the review queue |
 | `GET /api/incidents/:id` | Detail, latest investigation ID, all previous runs, RCA versions (`:id` = UUID or key) |
 | `GET /api/incidents/:id/evidence` | Logs, error signals, deployments, metrics, timeline, runbooks |
 | `POST /api/incidents/:id/investigations` | Start an investigation `{ question?, mode? }`, returns 202. `mode: "live"` needs the `x-access-code` header (403 without it, 429 over the daily limit) |
-| `GET /api/investigations/:id` | Status, stage, hypotheses with resolved evidence, similar incidents, stage trace |
+| `GET /api/investigations/:id` | Status, stage, hypotheses with resolved evidence, similar incidents, stage trace, every system check (`tool_calls`) |
 | `POST /api/investigations/:id/feedback` | `{ hypothesis_id?, helpful?, comment?, verified_root_cause? }` |
 | `POST /api/incidents/:id/rca-drafts` | Generate an RCA version from a completed investigation (same mode as the investigation) |
 | `GET/PATCH /api/rca-drafts/:id` | Read or save RCA edits |
@@ -125,16 +166,18 @@ web (React + Vite)  ──/api──▶  api (Fastify)  ──▶  SQLite (node:
 ## Tests
 
 ```bash
-npm test            # Vitest: pipeline + API (in-memory DB, recorded/scripted providers)
+npm test            # Vitest: MCP servers, then pipeline + API (in-memory DB, recorded/scripted providers)
+MSSQL_TEST=1 npm test -w mcp   # also run every db_* tool against local SQL Server (after setup.sql)
 npm run e2e         # Playwright smoke: queue → investigation → evidence → similar → RCA edit/save/export
 npm run typecheck
 ```
 
-Covered: happy path, insufficient evidence, invalid evidence IDs, prompt injection, secret redaction, retry on malformed output, provider failure, RCA edit persistence and versioning, demo reset (including determinism across runs), log immutability, live access code / daily limit / reset rules, unverified-number flags, stage trace, review queue states, run history, and static serving for the Docker image.
+Covered: happy path, insufficient evidence, invalid evidence IDs, prompt injection, secret redaction, retry on malformed output, provider failure, RCA edit persistence and versioning, demo reset (including determinism across runs), log immutability, live access code / daily limit / reset rules, unverified-number flags, stage trace, review queue states, run history, and static serving for the Docker image. For the MCP systems: path and junction escapes, binary files and caps (files); feed + real git repo and argument injection (deploys); windows and peaks (metrics); allow-listed databases, degraded permissions and the `EXECUTE AS` wrapper (SQL Server); the hub ignoring non-read-only tools and timing out a hung one; baseline + follow-up calls cited as `mcp:N`; secrets in tool output redacted before the model; the follow-up limit; follow-up failure not failing the run; and starting the real servers as child processes.
 
 ## Known limitations
 
-- Synthetic data only; there are no live integrations. A real adapter (one observability source, behind an interface) is the next step.
+- The demo systems are synthetic (log files, a deploy feed and metric series in `demo-systems/`). SQL Server checks are real once enabled. Point `mcp.config.json` at real folders and repos to use your own.
+- Suggested next systems: an HTTP endpoint probe, message-queue backlog and dead letters, Kubernetes/cloud events, and config/feature-flag changes. Metrics could read Prometheus behind the same `metrics_series` tool.
 - No user accounts. The API binds to 127.0.0.1 (Docker: published on 127.0.0.1 only); the shared access code only gates paid live runs and remote reset.
 - Retrieval is keyword/FTS5 only; there is no vector search.
 - Investigations run in-process. A server restart marks in-flight runs as failed.

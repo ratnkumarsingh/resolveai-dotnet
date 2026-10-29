@@ -24,11 +24,26 @@ export interface LlmResult<T> {
   usage?: Record<string, number>;
 }
 
+/** A read-only tool the model may call during follow-up checks. */
+export interface FollowUpTool {
+  name: string;
+  description: string;
+  inputSchema: { type: "object"; properties?: Record<string, unknown>; required?: string[] };
+}
+
+/**
+ * Runs one tool for the model and returns the text it sees, which starts with the evidence ID to cite.
+ * It enforces the call limit itself, so a provider can't exceed it.
+ */
+export type CallTool = (name: string, args: Record<string, unknown>) => Promise<string>;
+
 export interface LlmProvider {
   readonly mode: "live" | "recorded";
   readonly model: string | null;
   investigate(packet: EvidencePacket): Promise<LlmResult<InvestigationOutput>>;
   draftRca(input: RcaInput): Promise<LlmResult<RcaOutput>>;
+  /** Optional extra evidence gathering before analysis: the provider decides which tools to call. */
+  followUp?(packet: EvidencePacket, tools: FollowUpTool[], call: CallTool, maxCalls: number): Promise<{ usage?: Record<string, number> }>;
 }
 
 /** An error whose message is safe to show the user. `retryable` marks malformed-output failures. */

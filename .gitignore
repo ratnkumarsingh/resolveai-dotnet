@@ -5,5 +5,9 @@ data/
 *.db-journal
 .env
 *.log
+!demo-systems/logs/**/*.log
 test-results/
+# Local MCP settings (copy mcp.config.example.json); may point at real systems.
+mcp.config.json
+.mcp.json
 playwright-report/

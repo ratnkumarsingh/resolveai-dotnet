@@ -12,6 +12,8 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^1.3.0",
     "@fastify/static": "^10.1.8",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "@resolveai/mcp": "*",
     "fastify": "^5.12.7",
     "tsx": "^4.23.15",
     "zod": "^4.6.7"

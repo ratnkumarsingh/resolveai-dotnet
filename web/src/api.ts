@@ -8,6 +8,7 @@ import type {
   InvestigationRun,
   PatchRcaBody,
   RcaDraft,
+  SystemStatus,
 } from "@resolveai/shared";
 
 const CODE_KEY = "resolveai.accessCode";
@@ -80,6 +81,7 @@ export interface KnowledgeDoc {
 
 export const api = {
   config: () => request<AppConfig>("GET", "/api/config"),
+  systems: () => request<{ systems: SystemStatus[]; enabled: boolean }>("GET", "/api/systems"),
   incidents: (params: Record<string, string>) =>
     request<IncidentList>("GET", `/api/incidents?${new URLSearchParams(Object.entries(params).filter(([, v]) => v))}`),
   incident: (id: string) => request<IncidentDetail>("GET", `/api/incidents/${encodeURIComponent(id)}`),

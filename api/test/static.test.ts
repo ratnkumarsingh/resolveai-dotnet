@@ -19,6 +19,6 @@ describe("serving the built web app", () => {
     expect((await app.inject("/assets/app.js")).body).toBe("console.log(1)");
     expect((await app.inject("/assets/missing.js")).statusCode).toBe(404);
     expect((await app.inject("/api/nope")).json()).toEqual({ error: "Not found" });
-    expect((await app.inject("/api/incidents")).json().total).toBe(4);
+    expect((await app.inject("/api/incidents")).json().total).toBe(6);
   });
 });

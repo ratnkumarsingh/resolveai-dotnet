@@ -18,6 +18,8 @@ services:
       WEB_DIST: /app/web/dist
       # The host-only port binding above is what keeps reset local; inside Docker every caller has a bridge IP.
       DEMO_RESET_ANY_IP: "true"
+      # To check your own systems, mount a config and the folders it lists, for example:
+      #   RESOLVEAI_MCP_CONFIG: /app/mcp.config.json   (plus a volume ./mcp.config.json:/app/mcp.config.json:ro)
     volumes:
       - resolveai-data:/app/data
     restart: unless-stopped

@@ -1,0 +1,4 @@
+# Loaded by payment-api at startup (v2.8.1 moved these settings here from env vars).
+pool:
+  max: 20            # was DB_POOL_MAX=100 in v2.8.0
+  acquireTimeoutMs: 5000

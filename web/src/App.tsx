@@ -5,16 +5,18 @@ import { cx } from "./components/ui";
 import IncidentDetail from "./pages/IncidentDetail";
 import IncidentQueue from "./pages/IncidentQueue";
 import Settings from "./pages/Settings";
+import Systems from "./pages/Systems";
 
 export default function App() {
   const config = useQuery({ queryKey: ["config"], queryFn: api.config });
 
   return (
     <div className="min-h-screen">
+      <div aria-hidden className="h-1 bg-gradient-to-r from-sky-500 via-violet-500 via-60% to-emerald-500" />
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
           <Link to="/" className="flex items-center gap-2 font-semibold text-slate-900">
-            <span className="grid h-7 w-7 place-items-center rounded-md bg-indigo-600 text-white">
+            <span className="grid h-7 w-7 place-items-center rounded-md bg-gradient-to-br from-indigo-600 to-violet-600 text-white shadow-sm">
               <svg viewBox="0 0 32 32" className="h-4 w-4" aria-hidden>
                 <path d="M7 17l6 6 12-13" stroke="currentColor" strokeWidth="4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
@@ -22,7 +24,7 @@ export default function App() {
             ResolveAI
           </Link>
           <nav className="flex gap-1 text-sm">
-            {[["/", "Incidents"], ["/settings", "Settings & demo data"]].map(([to, label]) => (
+            {[["/", "Incidents"], ["/systems", "Systems"], ["/settings", "Settings & demo data"]].map(([to, label]) => (
               <NavLink
                 key={to}
                 to={to}
@@ -52,6 +54,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<IncidentQueue />} />
           <Route path="/incidents/:id" element={<IncidentDetail />} />
+          <Route path="/systems" element={<Systems />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<p className="text-slate-600">Page not found. <Link className="text-indigo-600 underline" to="/">Back to incidents</Link></p>} />
         </Routes>

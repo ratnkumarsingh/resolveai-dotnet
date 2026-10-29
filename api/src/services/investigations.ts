@@ -10,23 +10,37 @@ import type {
   SimilarIncidentResult,
   HistoricalIncident,
   InvestigationRun,
+  SystemKind,
+  ToolCallRecord,
   TraceStage,
 } from "@resolveai/shared";
+import type { McpConfig } from "@resolveai/mcp";
 import { evidenceId } from "@resolveai/shared";
 import { all, type Db, get, json, run, tx } from "../db/index.js";
 import { PROMPT_VERSION } from "../llm/prompts.js";
-import { LlmError, type LlmProvider, type LlmResult } from "../llm/provider.js";
+import { type CallTool, LlmError, type LlmProvider, type LlmResult } from "../llm/provider.js";
+import { planBaseline } from "../mcp/baseline.js";
+import type { Hub } from "../mcp/hub.js";
 import { loadEvidence } from "../pipeline/evidence.js";
-import { buildPacket, type EvidencePacket } from "../pipeline/packet.js";
+import { addToolItem, buildPacket, type EvidencePacket } from "../pipeline/packet.js";
 import { findSimilar } from "../pipeline/similar.js";
 import { validateInvestigation } from "../pipeline/validate.js";
+
+/** The MCP systems an investigation can check, and how many extra calls the model may make. */
+export interface Systems {
+  hub: Hub;
+  config: McpConfig;
+  maxFollowUps: number;
+}
 
 export interface Deps {
   db: Db;
   llm: LlmProvider;
+  systems?: Systems;
 }
 
 const OVERALL_TIMEOUT_MS = 180_000;
+const FOLLOW_UP_TIMEOUT_MS = 120_000;
 
 const now = () => new Date().toISOString();
 
@@ -85,8 +99,35 @@ class Trace {
   }
 }
 
+/** Calls tools in order, numbering each result as evidence mcp:N and recording it. */
+function toolRecorder(db: Db, investigationId: string, hub: Hub) {
+  const calls: ToolCallRecord[] = [];
+  const call = async (phase: ToolCallRecord["phase"], tool: string, args: Record<string, unknown>) => {
+    const spec = hub.tools().find((t) => t.name === tool);
+    const seq = calls.length + 1;
+    const started = Date.now();
+    const res = await hub.call(tool, args);
+    const rec: ToolCallRecord = {
+      ref: evidenceId("mcp", String(seq)), seq, phase, system: (spec?.system ?? "files") as SystemKind, server: spec?.server ?? "unknown",
+      tool, args, ok: res.ok, summary: res.summary, rows: res.rows, truncated: res.truncated,
+      duration_ms: Date.now() - started, started_at: new Date(started).toISOString(),
+    };
+    calls.push(rec);
+    run(db,
+      `INSERT INTO tool_calls (id, investigation_id, seq, phase, system, server, tool, args, ok, summary, rows, truncated, duration_ms, started_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      randomUUID(), investigationId, seq, phase, rec.system, rec.server, tool, JSON.stringify(args), res.ok ? 1 : 0, res.summary,
+      JSON.stringify(res.rows), res.truncated ? 1 : 0, rec.duration_ms, rec.started_at);
+    return rec;
+  };
+  return { calls, call };
+}
+
+const countBy = (calls: ToolCallRecord[]) => Object.fromEntries(
+  [...new Set(calls.map((c) => c.system))].map((s) => [s, calls.filter((c) => c.system === s).length]));
+
 async function runInvestigation(deps: Deps, id: string, incident: Incident, question: string | null) {
-  const { db, llm } = deps;
+  const { db, llm, systems } = deps;
   const trace = new Trace();
   const saveTrace = () => run(db, "UPDATE investigations SET trace = ? WHERE id = ?", JSON.stringify(trace.stages), id);
 
@@ -105,7 +146,22 @@ async function runInvestigation(deps: Deps, id: string, incident: Incident, ques
     candidates: c.length,
     top_match: c[0]?.historical.key ?? "none",
   }));
-  const packet = await trace.step("Build evidence packet", () => buildPacket(evidence, similar, question), (p) => ({
+  const tools = systems && toolRecorder(db, id, systems.hub);
+  if (systems && tools) {
+    setStage(db, id, "running", "Checking systems: database, files, deploys and metrics");
+    await trace.step("Baseline checks (MCP)", async () => {
+      for (const p of planBaseline(incident, systems.config, systems.hub.tools())) await tools.call("baseline", p.tool, p.args);
+      return tools.calls;
+    }, (calls) => ({
+      calls: calls.length,
+      failed: calls.filter((c) => !c.ok).length,
+      ...countBy(calls),
+      systems_off: systems.hub.status().filter((s) => s.status !== "connected").map((s) => s.system).join(", ") || "none",
+    }));
+    saveTrace();
+  }
+
+  const packet = await trace.step("Build evidence packet", () => buildPacket(evidence, similar, question, tools?.calls ?? []), (p) => ({
     items: p.items.length,
     characters: JSON.stringify(p).length,
     redactions: p.redactions,
@@ -114,8 +170,38 @@ async function runInvestigation(deps: Deps, id: string, incident: Incident, ques
   run(db, "UPDATE investigations SET evidence_packet = ? WHERE id = ?", JSON.stringify(packet), id);
   saveTrace();
 
-  setStage(db, id, "running", llm.mode === "live" ? "Analysing evidence with Claude" : "Analysing evidence (recorded mode)");
   const issues: string[] = [];
+  if (systems && tools && llm.followUp && systems.maxFollowUps > 0) {
+    const max = systems.maxFollowUps;
+    const before = tools.calls.length;
+    let refused = 0;
+    // The limit is enforced here, not by the provider: past it, the model only gets a refusal back.
+    const call: CallTool = async (name, args) => {
+      if (tools.calls.length - before >= max) {
+        refused++;
+        return `Limit reached: no more tool calls are allowed in this investigation (${max}). Stop calling tools.`;
+      }
+      const item = addToolItem(packet, await tools.call("follow_up", name, args));
+      return `[${item.id}] ${item.excerpt}`;
+    };
+    setStage(db, id, "running", llm.mode === "live" ? "Claude is checking systems for missing evidence" : "Running follow-up checks (recorded)");
+    try {
+      await trace.step(llm.mode === "live" ? "Follow-up checks (Claude)" : "Follow-up checks (recorded)", () => withTimeout(
+        llm.followUp!(packet, systems.hub.tools().map(({ name, description, inputSchema }) => ({ name, description, inputSchema })), call, max),
+        FOLLOW_UP_TIMEOUT_MS, "Follow-up checks took too long and were stopped.",
+      ), (r) => ({
+        calls: tools.calls.length - before, limit: max, refused,
+        ...Object.fromEntries(Object.entries(r.usage ?? {}).filter(([, v]) => typeof v === "number")),
+      }));
+    } catch (err) {
+      // Follow-ups only add evidence; if they fail, the analysis still runs on what was gathered.
+      issues.push(`Follow-up checks stopped early: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    run(db, "UPDATE investigations SET evidence_packet = ? WHERE id = ?", JSON.stringify(packet), id);
+    saveTrace();
+  }
+
+  setStage(db, id, "running", llm.mode === "live" ? "Analysing evidence with Claude" : "Analysing evidence (recorded mode)");
   let result: LlmResult<InvestigationOutput>;
   try {
     result = await trace.step(llm.mode === "live" ? "Analyse with Claude" : "Analyse (recorded)", () => withTimeout(
@@ -203,7 +289,7 @@ export function getPacket(row: { evidence_packet: string | null }): EvidencePack
 }
 
 const KIND_LABEL: Record<string, string> = {
-  log: "Log", dep: "Deployment", met: "Metric", doc: "Runbook", hist: "Past incident", tl: "Timeline",
+  log: "Log", dep: "Deployment", met: "Metric", doc: "Runbook", hist: "Past incident", tl: "Timeline", mcp: "System check",
 };
 
 export function resolveEvidence(packet: EvidencePacket | null, refs: string[]): ResolvedEvidence[] {
@@ -214,7 +300,8 @@ export function resolveEvidence(packet: EvidencePacket | null, refs: string[]): 
     return {
       ref,
       kind,
-      label: `${KIND_LABEL[kind] ?? kind}${item?.occurrences ? ` ×${item.occurrences}` : ""}`,
+      // A system check is labelled with its system and tool, e.g. "database: db_blocking".
+      label: kind === "mcp" && item ? item.source.replace(/\(.*$/, "") : `${KIND_LABEL[kind] ?? kind}${item?.occurrences ? ` ×${item.occurrences}` : ""}`,
       excerpt: item?.excerpt ?? "(record not in packet)",
       timestamp: item?.timestamp ?? null,
     };
@@ -282,7 +369,19 @@ export function getInvestigation(db: Db, id: string): (Investigation & { stage: 
     similar_incidents,
     evidence_count: packet?.items.length ?? 0,
     trace: json<TraceStage[]>(row.trace, []),
+    tool_calls: listToolCalls(db, id),
   };
+}
+
+export function listToolCalls(db: Db, investigationId: string): ToolCallRecord[] {
+  return all<{
+    seq: number; phase: ToolCallRecord["phase"]; system: SystemKind; server: string; tool: string; args: string; ok: number;
+    summary: string; rows: string; truncated: number; duration_ms: number; started_at: string;
+  }>(db, "SELECT * FROM tool_calls WHERE investigation_id = ? ORDER BY seq", investigationId).map((r) => ({
+    ref: evidenceId("mcp", String(r.seq)), seq: r.seq, phase: r.phase, system: r.system, server: r.server, tool: r.tool,
+    args: json<Record<string, unknown>>(r.args, {}), ok: !!r.ok, summary: r.summary, rows: json<Record<string, unknown>[]>(r.rows, []),
+    truncated: !!r.truncated, duration_ms: r.duration_ms, started_at: r.started_at,
+  }));
 }
 
 export function latestInvestigationId(db: Db, incidentId: string): string | undefined {

@@ -1,0 +1,4 @@
+2026-10-27T15:10:05.000Z WARN  notification-service SMTP relay responded 421 4.7.0 Try again later (rate limited)
+2026-10-27T15:12:40.000Z WARN  notification-service SMTP relay responded 421 4.7.0 Try again later (rate limited)
+2026-10-27T15:16:30.000Z ERROR notification-service reconnect smtp://mailer:password=hunter2-FAKE@smtp.relay.example:587 failed: 421 rate limited
+2026-10-27T15:18:00.000Z INFO  notification-service queued password reset for jane.doe@example.com (attempt 4)

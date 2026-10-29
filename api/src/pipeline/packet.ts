@@ -1,10 +1,10 @@
-import type { IncidentEvidence } from "@resolveai/shared";
+import type { IncidentEvidence, ToolCallRecord } from "@resolveai/shared";
 import { sanitize } from "./sanitize.js";
 import type { SimilarCandidate } from "./similar.js";
 
 export interface PacketItem {
   id: string;
-  type: "log" | "deployment" | "metric" | "timeline" | "runbook" | "historical_incident";
+  type: "log" | "deployment" | "metric" | "timeline" | "runbook" | "historical_incident" | "tool_result";
   timestamp: string | null;
   source: string;
   excerpt: string;
@@ -31,8 +31,34 @@ export interface EvidencePacket {
 }
 
 export const MAX_LOG_GROUPS = 40;
-export const MAX_PACKET_CHARS = 24_000;
+export const MAX_PACKET_CHARS = 40_000;
 const MAX_EXCERPT = 600;
+const MAX_TOOL_EXCERPT = 1200;
+
+/** One line per row, `key=value` pairs, nulls dropped: compact enough to fit several rows in an excerpt. */
+function compactRows(rows: Record<string, unknown>[]) {
+  return rows.map((r) => Object.entries(r).filter(([, v]) => v !== null && v !== undefined && v !== "")
+    .map(([k, v]) => `${k}=${typeof v === "object" ? JSON.stringify(v) : String(v)}`).join(" ")).join("\n");
+}
+
+/** A tool call as a packet item, sanitised like every other excerpt. */
+export function toolItem(call: ToolCallRecord): { item: PacketItem; redactions: number } {
+  const r = sanitize(`${call.ok ? "" : "CHECK FAILED: "}${call.summary}${call.rows.length ? `\n${compactRows(call.rows)}` : ""}`);
+  const excerpt = r.text.length > MAX_TOOL_EXCERPT ? `${r.text.slice(0, MAX_TOOL_EXCERPT)}…` : r.text;
+  const args = Object.entries(call.args).map(([k, v]) => `${k}=${String(v)}`).join(", ");
+  return {
+    item: { id: call.ref, type: "tool_result", timestamp: null, source: `${call.system}: ${call.tool}(${args})`, excerpt },
+    redactions: r.redactions,
+  };
+}
+
+/** Adds a follow-up tool result to an existing packet (the packet stays the single record of what the model saw). */
+export function addToolItem(packet: EvidencePacket, call: ToolCallRecord) {
+  const { item, redactions } = toolItem(call);
+  packet.items.push(item);
+  packet.redactions += redactions;
+  return item;
+}
 
 /** Normalises a log line so repeats that differ only by IDs/numbers collapse into one group. */
 function logShape(message: string): string {
@@ -43,7 +69,7 @@ function logShape(message: string): string {
  * Builds the bounded, sanitised, ordered evidence the model is allowed to see and cite.
  * Every item has a stable typed ID; the validator only accepts citations of these IDs.
  */
-export function buildPacket(evidence: IncidentEvidence, similar: SimilarCandidate[], question: string | null): EvidencePacket {
+export function buildPacket(evidence: IncidentEvidence, similar: SimilarCandidate[], question: string | null, toolCalls: ToolCallRecord[] = []): EvidencePacket {
   let redactions = 0;
   const clean = (s: string) => {
     const r = sanitize(s);
@@ -118,6 +144,13 @@ export function buildPacket(evidence: IncidentEvidence, similar: SimilarCandidat
   }
 
   items.sort((a, b) => (a.timestamp ?? "9999").localeCompare(b.timestamp ?? "9999"));
+
+  // Tool results come last, in call order (they describe what the systems showed when checked).
+  for (const call of toolCalls) {
+    const t = toolItem(call);
+    items.push(t.item);
+    redactions += t.redactions;
+  }
 
   // Enforce the overall size budget by dropping the lowest-priority items (info logs first).
   const size = () => JSON.stringify(items).length;

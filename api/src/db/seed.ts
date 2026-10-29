@@ -130,6 +130,52 @@ const INCIDENTS: IncidentSeed[] = [
       [t("09:36:00", "2026-10-25"), "resolution", "CDN cache purged; assets served"],
     ],
   },
+  {
+    // The files system is the main source here: the demo log folder holds the app log, storage.yaml and the mount table.
+    key: "INC-1045",
+    title: "Invoice PDF uploads failing",
+    service_name: "document-service",
+    severity: "SEV-2",
+    status: "open",
+    started_at: t("11:20:00"),
+    detected_at: t("11:26:00"),
+    description: "Customers cannot attach invoice PDFs; every upload returns an error. Started shortly after a document-service release.",
+    impact_summary: "All invoice uploads failing; uploads are piling up in the retry queue.",
+    logs: [
+      ["eacces-a", t("11:20:03"), "document-service", "ERROR", "document-service: upload failed: EACCES: permission denied, open '/mnt/invoices-archive/2026/10/27/inv-88213.pdf'", "storage_eacces", "app"],
+      ["eacces-b", t("11:21:17"), "document-service", "ERROR", "document-service: upload failed: EACCES: permission denied, open '/mnt/invoices-archive/2026/10/27/inv-88219.pdf'", "storage_eacces", "app"],
+      ["queue", t("11:24:10"), "document-service", "WARN", "document-service: retry queue depth 120 (uploads waiting for storage)", null, "app"],
+    ],
+    metrics: [["Upload error rate", "%", 0, 100, t("11:30:00")]],
+    timeline: [
+      [t("11:15:00"), "deployment", "document-service v1.4.0 released"],
+      [t("11:20:00"), "symptom", "First invoice upload failures"],
+      [t("11:26:00"), "alert", "Alert fired: upload error rate above 20%"],
+    ],
+  },
+  {
+    // The database system is the main source here: with the SQL Server MCP server on, db_* checks run against ResolveAIDemo.
+    key: "INC-1046",
+    title: "Order placement timing out",
+    service_name: "order-api",
+    severity: "SEV-1",
+    status: "open",
+    started_at: t("17:02:00"),
+    detected_at: t("17:04:00"),
+    description: "Placing an order hangs and then fails for most customers. The order database itself is up.",
+    impact_summary: "Most order placements failing for about eight minutes.",
+    logs: [
+      ["lock-a", t("17:02:10"), "order-api", "ERROR", "order-api: place order failed: Lock request time out period exceeded. (SQL error 1222) table=dbo.Orders", "sql_lock_timeout_1222", "app"],
+      ["timeout", t("17:02:31"), "order-api", "ERROR", "order-api: place order failed: Execution Timeout Expired.", "sql_execution_timeout", "app"],
+      ["lock-b", t("17:06:12"), "order-api", "ERROR", "order-api: place order failed: Lock request time out period exceeded. (SQL error 1222) table=dbo.Orders", "sql_lock_timeout_1222", "app"],
+    ],
+    metrics: [["Order failures", "per min", 1, 85, t("17:05:00")], ["DB request p95", "ms", 120, 8400, t("17:05:00")]],
+    timeline: [
+      [t("16:30:00"), "deployment", "order-api v4.2.0 released"],
+      [t("17:02:00"), "symptom", "Order placement starts timing out"],
+      [t("17:04:00"), "alert", "Alert fired: order failure rate above 10%"],
+    ],
+  },
 ];
 
 const DEPLOYMENTS: [name: string, service: string, version: string, at: string, summary: string, commit: string][] = [
@@ -138,6 +184,8 @@ const DEPLOYMENTS: [name: string, service: string, version: string, at: string, 
   ["checkout-520", "checkout-web", "v5.2.0", t("09:30:00"), "New address autocomplete widget", "e19a7c4"],
   ["checkout-519", "checkout-web", "v5.1.9", t("09:30:00", "2026-10-25"), "Bundle splitting for faster first paint", "c55d210"],
   ["notif-340", "notification-service", "v3.4.0", t("11:00:00", "2026-10-20"), "Upgrade templating library", "9b8e7a1"],
+  ["docs-140", "document-service", "v1.4.0", t("11:15:00"), "Move invoice storage to the archive volume", "b62f0d9"],
+  ["orders-420", "order-api", "v4.2.0", t("16:30:00"), "Run order reconciliation hourly instead of nightly", "c90e4a7"],
 ];
 
 const DOCS: [name: string, title: string, type: string, service: string | null, body: string, tags: string[]][] = [
@@ -207,7 +255,7 @@ const HISTORICAL: [name: string, key: string, title: string, service: string, sy
 ];
 
 const WIPE_ORDER = [
-  "feedback", "rca_drafts", "investigation_similar_incidents", "evidence_links", "hypotheses", "investigations",
+  "feedback", "rca_drafts", "tool_calls", "investigation_similar_incidents", "evidence_links", "hypotheses", "investigations",
   "historical_fts", "historical_incidents", "knowledge_fts", "knowledge_documents",
   "timeline_events", "metric_snapshots", "deployments", "log_events", "incidents",
 ];

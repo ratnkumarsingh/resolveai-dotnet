@@ -1,7 +1,7 @@
 import type { InvestigationOutput, LlmHypothesis, RcaOutput } from "@resolveai/shared";
 import { stableId } from "../db/seed.js";
 import type { EvidencePacket, PacketItem } from "../pipeline/packet.js";
-import type { LlmProvider, LlmResult, RcaInput } from "./provider.js";
+import type { CallTool, FollowUpTool, LlmProvider, LlmResult, RcaInput } from "./provider.js";
 
 /**
  * Offline provider for deterministic demos and tests. INC-1042 replays a recorded analysis; other
@@ -17,7 +17,15 @@ export class RecordedProvider implements LlmProvider {
   async investigate(packet: EvidencePacket): Promise<LlmResult<InvestigationOutput>> {
     await sleep(this.delayMs);
     const fixture = FIXTURES[packet.incident.key];
-    return { output: fixture ? fixture() : heuristicInvestigation(packet), model: null };
+    return { output: fixture ? citeToolResults(fixture(packet), packet) : heuristicInvestigation(packet), model: null };
+  }
+
+  /** Replays the follow-up checks a model would plausibly ask for, so the demo shows them without a model call. */
+  async followUp(packet: EvidencePacket, tools: FollowUpTool[], call: CallTool, maxCalls: number) {
+    const offered = new Set(tools.map((t) => t.name));
+    const plan = (FOLLOW_UPS[packet.incident.key] ?? []).filter((c) => offered.has(c.tool)).slice(0, maxCalls);
+    for (const c of plan) await call(c.tool, c.args);
+    return {};
   }
 
   async draftRca(input: RcaInput): Promise<LlmResult<RcaOutput>> {
@@ -33,7 +41,49 @@ const met = (inc: string, name: string) => `met:${stableId(`met:${inc}:${name}`)
 const dep = (name: string) => `dep:${stableId(`dep:${name}`)}`;
 const hist = (name: string) => `hist:${stableId(`hist:${name}`)}`;
 
-const FIXTURES: Record<string, () => InvestigationOutput> = {
+/** The packet ID of a system-check result, found by tool name (and optionally text in its result). */
+function toolRef(packet: EvidencePacket, tool: string, contains?: RegExp): string | null {
+  const item = packet.items.find((i) => i.type === "tool_result" && i.source.includes(`: ${tool}(`) && (!contains || contains.test(i.excerpt)));
+  return item?.id ?? null;
+}
+const refs = (...xs: (string | null)[]) => xs.filter((x): x is string => !!x);
+
+/** Follow-up checks replayed in recorded mode, as if the model had chosen them. */
+const FOLLOW_UPS: Record<string, { tool: string; args: Record<string, unknown> }[]> = {
+  "INC-1042": [
+    { tool: "deploys_change_summary", args: { service: "payment-api", commit: "7d03b1f" } },
+    { tool: "files_tail", args: { path: "payment-api/db-client.yaml", lines: 10 } },
+  ],
+  "INC-1045": [
+    { tool: "files_tail", args: { path: "document-service/mounts.txt", lines: 10 } },
+    { tool: "files_tail", args: { path: "document-service/storage.yaml", lines: 10 } },
+    { tool: "deploys_change_summary", args: { service: "document-service", commit: "b62f0d9" } },
+  ],
+  "INC-1046": [
+    { tool: "deploys_change_summary", args: { service: "order-api", commit: "c90e4a7" } },
+    { tool: "db_long_queries", args: { min_seconds: 5 } },
+  ],
+};
+
+/** System checks that support a recorded hypothesis, added to its citations when they were made. */
+const TOOL_CITES: Record<string, { hypothesis: number; tool: string; contains?: RegExp }[]> = {
+  "INC-1042": [
+    { hypothesis: 0, tool: "deploys_change_summary" },
+    { hypothesis: 0, tool: "files_tail", contains: /max: 20/ },
+    { hypothesis: 0, tool: "metrics_series", contains: /DB pool connections in use/ },
+  ],
+};
+
+function citeToolResults(output: InvestigationOutput, packet: EvidencePacket): InvestigationOutput {
+  for (const c of TOOL_CITES[packet.incident.key] ?? []) {
+    const ref = toolRef(packet, c.tool, c.contains);
+    const h = output.hypotheses[c.hypothesis];
+    if (ref && h && !h.evidence_ids.includes(ref)) h.evidence_ids.push(ref);
+  }
+  return output;
+}
+
+const FIXTURES: Record<string, (packet: EvidencePacket) => InvestigationOutput> = {
   "INC-1042": () => ({
     summary:
       "HTTP 500s on payment-api began about four minutes after v2.8.1 rolled out. The release moved database client settings into db-client.yaml, and the service logged pool.max=20 at startup where the 09:58 health check showed max=100. Requests then queued for connections and timed out while payments-db itself stayed healthy. This matches INC-0881, a pool-size regression after a config change. The leading hypothesis is not confirmed until an engineer compares the effective pool configuration with v2.8.0.",
@@ -117,6 +167,119 @@ const FIXTURES: Record<string, () => InvestigationOutput> = {
       "The payment-api database connectivity runbook recommends comparing configuration with the last healthy deployment before any rollback decision.",
     ],
   }),
+
+  "INC-1045": (packet) => {
+    const errors = toolRef(packet, "files_search", /EACCES/);
+    const mounts = toolRef(packet, "files_tail", /invoices-archive\s+ext4\s+ro/);
+    const storage = toolRef(packet, "files_tail", /path: \/mnt\/invoices-archive/);
+    const change = toolRef(packet, "deploys_change_summary", /invoices-archive/);
+    return {
+      summary:
+        `Invoice uploads began failing about five minutes after document-service v1.4.0 moved invoice storage to /mnt/invoices-archive. Every failure is EACCES (permission denied) on a path under that folder.${mounts ? " The node's mount table shows /mnt/invoices-archive mounted read-only (ro), while the previous path /data/invoices is read-write." : ""} The leading hypothesis is that the release pointed writes at a read-only archive volume; an engineer should confirm the mount on the running pods.`,
+      insufficient_evidence: false,
+      hypotheses: [
+        {
+          title: "v1.4.0 points invoice storage at a volume that is mounted read-only",
+          explanation:
+            `The v1.4.0 change replaced the storage path /data/invoices with /mnt/invoices-archive. Right after rollout the service logged that the new path is mounted read-only, and every upload since has failed with EACCES on that path.${mounts ? " The captured mount table lists /mnt/invoices-archive with the ro option." : ""}`,
+          confidence: mounts || storage ? "high" : "medium",
+          evidence_ids: refs(dep("docs-140"), log("INC-1045", "eacces-a"), errors, mounts, storage, change),
+          counter_evidence: [],
+          unknowns: ["Whether the archive volume is meant to be writable by document-service", "Whether every pod has the same mount options"],
+          recommended_checks: [
+            {
+              step: "On one document-service pod, look at the mount options for /mnt/invoices-archive and the owner of the folder.",
+              why: "A read-only mount explains EACCES on every write regardless of file permissions.",
+              expected_signal: "The mount shows ro, or the folder belongs to a user the service does not run as.",
+            },
+            {
+              step: "Compare storage.yaml in v1.3.x and v1.4.0.",
+              why: "Confirms the path change came from the release, not from an environment override.",
+              expected_signal: "Only v1.4.0 points at /mnt/invoices-archive.",
+            },
+          ],
+        },
+        {
+          title: "File ownership or permissions changed on the archive folder",
+          explanation:
+            "EACCES can also mean the service user lacks write permission on a writable volume, for example after a folder was recreated by another user.",
+          confidence: "low",
+          evidence_ids: refs(log("INC-1045", "eacces-a")),
+          counter_evidence: mounts ? ["The mount table shows the volume itself is read-only, which already explains the failures."] : [],
+          unknowns: ["Folder owner and mode on the archive volume"],
+          recommended_checks: [
+            {
+              step: "Check the owner and mode of /mnt/invoices-archive/2026/10/27 on a pod.",
+              why: "Separates a permissions problem from a read-only mount.",
+              expected_signal: "A different owner or a mode without write for the service user.",
+            },
+          ],
+        },
+      ],
+      similar_incidents: [],
+      limitations: [
+        "Recorded mode: this analysis was replayed, not produced by a live model call.",
+        ...(mounts ? [] : ["The mount table was not checked, so a read-only mount is inferred from the startup warning only."]),
+      ],
+    };
+  },
+
+  "INC-1046": (packet) => {
+    const errors = toolRef(packet, "files_search", /1222/);
+    const change = toolRef(packet, "deploys_change_summary", /reconcileOrders/);
+    const blocking = toolRef(packet, "db_blocking", /blocked request\(s\) behind/);
+    const dbErrors = toolRef(packet, "db_errors", /1222/);
+    const health = toolRef(packet, "db_health");
+    const live = blocking ? " ResolveAI's live check of SQL Server also found a blocking chain on the order database right now." : "";
+    return {
+      summary:
+        `Order placement started failing with SQL Server lock timeouts (error 1222) on dbo.Orders about two minutes after the hourly reconciliation job began. order-api v4.2.0, released half an hour earlier, moved that job from nightly to hourly, and the job updates every open order in one transaction.${live} The leading hypothesis is that the reconciliation transaction holds locks on dbo.Orders long enough to block order inserts and updates.`,
+      insufficient_evidence: false,
+      hypotheses: [
+        {
+          title: "Hourly reconciliation job (v4.2.0) holds long locks on dbo.Orders and blocks order placement",
+          explanation:
+            `The failures are lock timeouts and command timeouts on dbo.Orders, starting just after the job's start time. The v4.2.0 change runs the job every hour instead of at night, during peak order traffic.${blocking ? " The blocking check shows sessions waiting behind a head blocker that is holding an open transaction." : ""}`,
+          confidence: blocking ? "high" : "medium",
+          evidence_ids: refs(dep("orders-420"), log("INC-1046", "lock-a"), log("INC-1046", "timeout"), errors, change, blocking, dbErrors),
+          counter_evidence: [],
+          unknowns: ["How long the reconciliation transaction stays open", "Whether the job batches its updates"],
+          recommended_checks: [
+            {
+              step: "While the job runs, look at the blocking chain on the order database and the head blocker's last statement.",
+              why: "Shows directly whether the reconciliation session is the one holding the locks.",
+              expected_signal: "The head blocker is the reconciliation job's session with an open transaction.",
+            },
+            {
+              step: "Compare order failures per minute with the job's start and end times across several hours.",
+              why: "A repeating spike at the top of each hour points at the hourly job.",
+              expected_signal: "Failures rise at :00 and clear when the job finishes.",
+            },
+          ],
+        },
+        {
+          title: "General database resource pressure slowing every query",
+          explanation: "Slow queries and timeouts can come from CPU, memory or IO pressure on the database server rather than locking.",
+          confidence: "low",
+          evidence_ids: refs(health, met("INC-1046", "DB request p95")),
+          counter_evidence: ["The errors are lock timeouts (1222), which point at blocking rather than resource waits."],
+          unknowns: ["Database CPU and IO during the incident window"],
+          recommended_checks: [
+            {
+              step: "Check the top waits on the database server for the incident window.",
+              why: "Lock waits (LCK_M_*) point at blocking; IO or CPU waits point at resource pressure.",
+              expected_signal: "LCK_M_* waits dominate if blocking is the cause.",
+            },
+          ],
+        },
+      ],
+      similar_incidents: [],
+      limitations: [
+        "Recorded mode: this analysis was replayed, not produced by a live model call.",
+        ...(blocking ? [] : ["SQL Server was not checked live (the database system is off or showed no blocking), so blocking is inferred from the application's lock-timeout errors."]),
+      ],
+    };
+  },
 };
 
 // ---------------------------------------------------------------------------

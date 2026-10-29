@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Hypothesis, IncidentEvidence } from "@resolveai/shared";
 import { useState } from "react";
 import { api, type InvestigationDto } from "../api";
+import { SYSTEM, SystemIcon, systemOfLabel } from "./systems";
 import { AiBadge, Button, Card, ConfidenceChip, cx, Empty, ErrorBox, formatTime, Spinner } from "./ui";
 
 const KIND_STYLE: Record<string, string> = {
@@ -12,6 +13,20 @@ const KIND_STYLE: Record<string, string> = {
   doc: "bg-emerald-50 text-emerald-800",
   hist: "bg-violet-50 text-violet-800",
 };
+
+/** The source label of a cited record; system checks get their system's colour and icon. */
+function EvidenceChip({ kind, label }: { kind: string; label: string }) {
+  const system = kind === "mcp" ? systemOfLabel(label) : null;
+  if (system) {
+    return (
+      <span className={cx("inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium", SYSTEM[system].chip)} data-testid="system-citation">
+        <SystemIcon system={system} className="h-3 w-3" />
+        {label.slice(label.indexOf(":") + 1).trim()}
+      </span>
+    );
+  }
+  return <span className={cx("shrink-0 rounded px-1.5 py-0.5 text-xs font-medium", KIND_STYLE[kind])}>{label}</span>;
+}
 
 /** Facts computed directly from records, shown apart from anything the model inferred. */
 function ObservedFacts({ evidence }: { evidence: IncidentEvidence }) {
@@ -73,9 +88,12 @@ function HypothesisCard({ h, investigationId, onEvidence }: { h: Hypothesis; inv
                     title="Show source record"
                     data-testid="evidence-link"
                   >
-                    <span className={cx("shrink-0 rounded px-1.5 py-0.5 text-xs font-medium", KIND_STYLE[e.kind])}>{e.label}</span>
+                    <EvidenceChip kind={e.kind} label={e.label} />
                     {e.timestamp && <span className="shrink-0 font-mono text-xs leading-5 text-slate-500">{formatTime(e.timestamp, e.kind === "hist").replace(" UTC", "")}</span>}
-                    <span className="min-w-0 break-words text-slate-700 group-hover:text-indigo-700 group-hover:underline">{e.excerpt}</span>
+                    <span className="min-w-0 break-words text-slate-700 group-hover:text-indigo-700 group-hover:underline">
+                      {/* A system check cites its one-line summary here; the rows are in the System checks tab. */}
+                      {e.kind === "mcp" ? e.excerpt.split("\n")[0] : e.excerpt}
+                    </span>
                   </button>
                 </li>
               ))}
@@ -264,7 +282,7 @@ export function Findings({
         </div>
       )}
 
-      <TracePanel trace={inv.trace} />
+      <TracePanel trace={inv.trace} calls={inv.tool_calls} live={inv.llm_mode === "live"} />
 
       <VerifiedCauseForm inv={inv} />
     </div>
@@ -273,27 +291,74 @@ export function Findings({
 
 const fmtDetail = (v: string | number | boolean) => (typeof v === "boolean" ? (v ? "yes" : "no") : String(v));
 
-/** The audit trail: what each pipeline stage did and how long it took. Closed by default. */
-function TracePanel({ trace }: { trace: InvestigationDto["trace"] }) {
+/** Dot colour per pipeline stage, matched on the stage name. */
+const STAGE_TONE: [RegExp, string][] = [
+  [/^Gather/, "bg-slate-500"],
+  [/^Search/, "bg-violet-500"],
+  [/^Baseline/, "bg-gradient-to-br from-sky-500 to-indigo-600"],
+  [/^Build/, "bg-amber-500"],
+  [/^Follow-up/, "bg-gradient-to-br from-violet-500 to-fuchsia-600"],
+  [/^Analyse/, "bg-gradient-to-br from-indigo-500 to-violet-600"],
+  [/^Validate/, "bg-emerald-500"],
+];
+const toneOf = (stage: string) => STAGE_TONE.find(([re]) => re.test(stage))?.[1] ?? "bg-slate-400";
+
+/** The audit trail as a timeline: each stage, how long it took, what it reported, and every system call it made. */
+function TracePanel({ trace, calls, live }: { trace: InvestigationDto["trace"]; calls: InvestigationDto["tool_calls"]; live: boolean }) {
   if (!trace.length) return null;
   const total = trace.reduce((n, t) => n + t.duration_ms, 0);
+  const slowest = Math.max(1, ...trace.map((t) => t.duration_ms));
+  const slowestCall = Math.max(1, ...calls.map((c) => c.duration_ms));
   return (
-    <details className="rounded-lg border border-slate-200 bg-white p-4 text-sm" data-testid="trace-panel">
+    <details className="rounded-lg border border-slate-200 bg-white p-4 text-sm shadow-sm" data-testid="trace-panel">
       <summary className="cursor-pointer font-medium text-slate-800">
-        How this was produced <span className="font-normal text-slate-500">· {trace.length} stages · {(total / 1000).toFixed(1)} s</span>
+        How this was produced{" "}
+        <span className="font-normal text-slate-500">
+          · {trace.length} stages · {(total / 1000).toFixed(1)} s{calls.length > 0 && ` · ${calls.length} system checks`}
+        </span>
       </summary>
-      <ol className="mt-3 space-y-2">
-        {trace.map((t, i) => (
-          <li key={t.stage} className="flex flex-wrap gap-x-3 gap-y-1 border-l-2 border-slate-200 pl-3">
-            <span className="w-full font-medium text-slate-700 sm:w-48">{i + 1}. {t.stage}</span>
-            <span className="font-mono text-xs leading-5 text-slate-500">{t.duration_ms} ms</span>
-            <span className="flex flex-1 flex-wrap gap-1">
-              {Object.entries(t.details).map(([k, v]) => (
-                <span key={k} className="rounded bg-slate-100 px-1.5 text-xs leading-5 text-slate-600">{k.replace(/_/g, " ")}: {fmtDetail(v)}</span>
-              ))}
-            </span>
-          </li>
-        ))}
+      <ol className="relative ml-2 mt-4 space-y-4 border-l-2 border-slate-100 pl-5">
+        {trace.map((t, i) => {
+          const phase = /^Baseline/.test(t.stage) ? "baseline" : /^Follow-up/.test(t.stage) ? "follow_up" : null;
+          const stageCalls = phase ? calls.filter((c) => c.phase === phase) : [];
+          return (
+            <li key={t.stage} className="relative">
+              <span className={cx("absolute -left-[31px] top-0.5 grid h-5 w-5 place-items-center rounded-full text-[10px] font-bold text-white ring-4 ring-white", toneOf(t.stage))}>{i + 1}</span>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span className="font-medium text-slate-800">{t.stage}</span>
+                <span className="h-1.5 w-24 overflow-hidden rounded-full bg-slate-100" aria-hidden>
+                  <span className={cx("block h-full rounded-full", toneOf(t.stage))} style={{ width: `${Math.max(4, (t.duration_ms / slowest) * 100)}%` }} />
+                </span>
+                <span className="font-mono text-xs text-slate-500">{t.duration_ms} ms</span>
+              </div>
+              <div className="mt-1 flex flex-wrap gap-1">
+                {Object.entries(t.details).map(([k, v]) => (
+                  <span key={k} className="rounded bg-slate-100 px-1.5 text-xs leading-5 text-slate-600">{k.replace(/_/g, " ")}: {fmtDetail(v)}</span>
+                ))}
+              </div>
+              {stageCalls.length > 0 && (
+                <ul className="mt-2 space-y-1">
+                  {stageCalls.map((c) => (
+                    <li key={c.ref} className="flex flex-wrap items-center gap-2 text-xs">
+                      <span
+                        className={cx("h-2.5 w-2.5 shrink-0 rounded-full", c.phase === "baseline" ? SYSTEM[c.system].dot : SYSTEM[c.system].hollow)}
+                        aria-hidden
+                      />
+                      <span className={cx("rounded px-1.5 py-0.5 font-mono font-medium", SYSTEM[c.system].chip)}>{c.tool}</span>
+                      {c.phase === "follow_up" && <span className="font-semibold text-violet-700">{live ? "Claude asked" : "follow-up"}</span>}
+                      {!c.ok && <span className="rounded bg-red-100 px-1 font-semibold text-red-700">failed</span>}
+                      <span className="h-1 w-16 overflow-hidden rounded-full bg-slate-100" aria-hidden>
+                        <span className={cx("block h-full rounded-full", SYSTEM[c.system].bar)} style={{ width: `${Math.max(6, (c.duration_ms / slowestCall) * 100)}%` }} />
+                      </span>
+                      <span className="font-mono text-slate-500">{c.duration_ms} ms</span>
+                      <span className="min-w-0 flex-1 truncate text-slate-600" title={c.summary}>{c.summary}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </li>
+          );
+        })}
       </ol>
     </details>
   );

@@ -1,0 +1,78 @@
+[
+  {
+    "service": "payment-api",
+    "version": "v2.8.0",
+    "deployed_at": "2026-10-25T16:20:00Z",
+    "change_summary": "Add idempotency keys to refund endpoint",
+    "commit": "a41c9e2",
+    "author": "dev-payments",
+    "files_changed": [
+      {
+        "path": "src/refunds/handler.ts",
+        "added": 64,
+        "removed": 8
+      }
+    ]
+  },
+  {
+    "service": "payment-api",
+    "version": "v2.8.1",
+    "deployed_at": "2026-10-27T10:00:00Z",
+    "change_summary": "Database client configuration updated (connection pool settings moved to db-client.yaml)",
+    "commit": "7d03b1f",
+    "author": "dev-payments",
+    "files_changed": [
+      {
+        "path": "config/db-client.yaml",
+        "added": 4,
+        "removed": 0
+      },
+      {
+        "path": "src/db/pool.ts",
+        "added": 9,
+        "removed": 12
+      }
+    ],
+    "patch": "--- a/src/db/pool.ts\n+++ b/src/db/pool.ts\n-  max: Number(process.env.DB_POOL_MAX ?? 100),\n+  max: fileConfig.pool.max,\n--- /dev/null\n+++ b/config/db-client.yaml\n+pool:\n+  max: 20\n+  acquireTimeoutMs: 5000\n"
+  },
+  {
+    "service": "checkout-web",
+    "version": "v5.2.0",
+    "deployed_at": "2026-10-27T09:30:00Z",
+    "change_summary": "New address autocomplete widget",
+    "commit": "e19a7c4",
+    "author": "dev-web"
+  },
+  {
+    "service": "document-service",
+    "version": "v1.4.0",
+    "deployed_at": "2026-10-27T11:15:00Z",
+    "change_summary": "Move invoice storage to the archive volume",
+    "commit": "b62f0d9",
+    "author": "dev-docs",
+    "files_changed": [
+      {
+        "path": "config/storage.yaml",
+        "added": 1,
+        "removed": 1
+      }
+    ],
+    "patch": "--- a/config/storage.yaml\n+++ b/config/storage.yaml\n-  path: /data/invoices\n+  path: /mnt/invoices-archive\n"
+  },
+  {
+    "service": "order-api",
+    "version": "v4.2.0",
+    "deployed_at": "2026-10-27T16:30:00Z",
+    "change_summary": "Run order reconciliation hourly instead of nightly",
+    "commit": "c90e4a7",
+    "author": "dev-orders",
+    "files_changed": [
+      {
+        "path": "src/jobs/schedule.ts",
+        "added": 1,
+        "removed": 1
+      }
+    ],
+    "patch": "--- a/src/jobs/schedule.ts\n+++ b/src/jobs/schedule.ts\n-  reconcileOrders: '0 2 * * *',\n+  reconcileOrders: '0 * * * *',\n"
+  }
+]

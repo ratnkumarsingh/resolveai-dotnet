@@ -28,7 +28,16 @@ test("incident → investigation → evidence → similar incident → RCA draft
   const trace = page.getByTestId("trace-panel");
   await trace.locator("summary").click();
   await expect(trace).toContainText("Build evidence packet");
-  await expect(trace).toContainText("redactions: 1");
+  await expect(trace).toContainText(/redactions: [1-9]/);
+  await expect(trace).toContainText("Baseline checks (MCP)");
+
+  // The systems were checked: citations carry their system, and every call is listed with its result.
+  await expect(page.getByTestId("systems-strip")).toContainText("Files & logs");
+  await expect(hypotheses.first().getByTestId("system-citation").first()).toBeVisible();
+  await page.getByRole("tab", { name: /System checks/ }).click();
+  await expect(page.getByTestId("tool-result").first()).toContainText("files_search");
+  await expect(page.getByTestId("tool-results")).toContainText("Follow-up");
+  await page.getByRole("tab", { name: "AI findings" }).click();
 
   // Evidence links jump to the source record.
   await hypotheses.first().getByTestId("evidence-link").filter({ hasText: "pool.max=20" }).click();
@@ -67,4 +76,9 @@ test("incident → investigation → evidence → similar incident → RCA draft
   await page.getByTestId("needs-review").click();
   await expect(page.getByRole("row", { name: /INC-1042/ })).toContainText("Needs review");
   await expect(page.getByRole("row", { name: /INC-1043/ })).toHaveCount(0);
+
+  // Each system has its own MCP server and status.
+  await page.getByRole("link", { name: "Systems" }).click();
+  await expect(page.getByTestId("system-files")).toContainText("Connected");
+  await expect(page.getByTestId("system-database")).toContainText(/Turned off|Connected/);
 });

@@ -14,6 +14,7 @@ import {
   getInvestigation, getInvestigationRow, latestInvestigationId, listInvestigationRuns, liveRunsToday, startInvestigation,
 } from "./services/investigations.js";
 import { createRca, getRca, listRcas, patchRca, rcaMarkdown } from "./services/rca.js";
+import type { Systems } from "./services/investigations.js";
 
 export interface Providers {
   recorded: LlmProvider;
@@ -24,6 +25,8 @@ export interface Providers {
 export interface AppDeps {
   db: Db;
   providers: Providers;
+  /** MCP systems checked during investigations; absent when MCP is turned off. */
+  systems?: Systems;
   config: Pick<Config, "demoMode" | "model" | "llmMode" | "liveAccessCode" | "liveDailyLimit"> & {
     /** Allow demo reset from any client IP (the Docker port is published on 127.0.0.1 only). */
     demoResetAnyIp?: boolean;
@@ -49,7 +52,7 @@ const REVIEW_STATES = new Set<ReviewState>(["none", "pending", "verified"]);
 const digest = (s: string) => createHash("sha256").update(s).digest();
 
 export function buildApp(deps: AppDeps) {
-  const { db, providers, config } = deps;
+  const { db, providers, config, systems } = deps;
   const app = Fastify({ logger: false });
   const defaultProvider = config.llmMode === "live" && providers.live ? providers.live : providers.recorded;
   const liveAvailable = !!providers.live && (config.llmMode === "live" || !!config.liveAccessCode);
@@ -101,7 +104,10 @@ export function buildApp(deps: AppDeps) {
     live_runs_today: liveRunsToday(db),
     demo_mode: config.demoMode,
     data_source: "Demo dataset",
+    max_follow_up_calls: systems?.maxFollowUps ?? 0,
   }));
+
+  app.get("/api/systems", async () => ({ systems: systems?.hub.status() ?? [], enabled: !!systems }));
 
   app.get("/api/incidents", async (req: FastifyRequest<{ Querystring: Record<string, string | undefined> }>) => {
     const q = req.query;
@@ -140,7 +146,7 @@ export function buildApp(deps: AppDeps) {
       "SELECT id FROM investigations WHERE incident_id = ? AND status IN ('queued', 'running') LIMIT 1", incident.id);
     if (running) return reply.status(202).send({ investigation_id: running.id, status: "running" });
     const llm = providerFor(req, body.mode ?? defaultProvider.mode);
-    const id = startInvestigation({ db, llm }, incident, body.question?.trim() || null);
+    const id = startInvestigation({ db, llm, systems }, incident, body.question?.trim() || null);
     return reply.status(202).send({ investigation_id: id, status: "queued" });
   });
 

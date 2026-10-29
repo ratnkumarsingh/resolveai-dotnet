@@ -6,11 +6,11 @@ describe("incidents", () => {
   it("lists seeded incidents with filters and returns detail and evidence", async () => {
     const { app } = makeApp();
     const list = (await app.inject("/api/incidents")).json();
-    expect(list.total).toBe(4);
-    expect(list.items[0].key).toBe("INC-1042");
+    expect(list.total).toBe(6);
+    expect(list.items[0].key).toBe("INC-1046");
 
     const sev1 = (await app.inject("/api/incidents?severity=SEV-1")).json();
-    expect(sev1.items.map((i: { key: string }) => i.key)).toEqual(["INC-1042"]);
+    expect(sev1.items.map((i: { key: string }) => i.key).sort()).toEqual(["INC-1042", "INC-1046"]);
 
     const detail = (await app.inject("/api/incidents/INC-1042")).json();
     expect(detail.incident.title).toMatch(/Payment API/);

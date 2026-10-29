@@ -6,6 +6,8 @@ import { DeploymentsTab, LogsTab, OverviewTab, rowId } from "../components/Evide
 import { Findings } from "../components/Findings";
 import { RcaPanel } from "../components/RcaEditor";
 import { SimilarIncidents } from "../components/SimilarIncidents";
+import { SystemsStrip } from "../components/systems";
+import { ToolResultsTab } from "../components/ToolResults";
 import { Button, cx, ErrorBox, formatTime, SeverityChip, Spinner, StatusChip } from "../components/ui";
 
 const TABS = [
@@ -13,12 +15,15 @@ const TABS = [
   ["logs", "Logs"],
   ["deployments", "Deployments"],
   ["findings", "AI findings"],
+  ["systems", "System checks"],
   ["similar", "Similar incidents"],
   ["rca", "RCA"],
 ] as const;
 type Tab = (typeof TABS)[number][0];
 
-const TAB_FOR_KIND: Record<string, Tab> = { log: "logs", dep: "deployments", met: "overview", tl: "overview", doc: "overview", hist: "similar" };
+const TAB_FOR_KIND: Record<string, Tab> = {
+  log: "logs", dep: "deployments", met: "overview", tl: "overview", doc: "overview", hist: "similar", mcp: "systems",
+};
 
 export default function IncidentDetail() {
   const { id = "" } = useParams();
@@ -30,6 +35,7 @@ export default function IncidentDetail() {
   const [live, setLive] = useState(false);
 
   const config = useQuery({ queryKey: ["config"], queryFn: api.config });
+  const systems = useQuery({ queryKey: ["systems"], queryFn: api.systems });
   // Shown only when the server can run live on request; a server that is live by default needs no toggle.
   const liveAllowed = !!config.data?.live_available && config.data.llm_mode !== "live";
   const liveOn = liveAllowed && live;
@@ -61,6 +67,12 @@ export default function IncidentDetail() {
     setTab("overview");
     setFocus(null);
   }, [id]);
+
+  // When a run finishes, refresh the incident so the run list shows its final status.
+  const invStatus = inv.data?.status;
+  useEffect(() => {
+    if (invStatus === "completed" || invStatus === "failed") qc.invalidateQueries({ queryKey: ["incident", id] });
+  }, [invStatus, id, qc]);
 
   // After a jump to a source record, scroll it into view once its tab has rendered.
   useEffect(() => {
@@ -110,6 +122,11 @@ export default function IncidentDetail() {
               Started {formatTime(incident.started_at, true)} · detected {formatTime(incident.detected_at, true)}
               {incident.resolved_at && <> · resolved {formatTime(incident.resolved_at, true)}</>}
             </div>
+            {systems.data && (
+              <div className="mt-3">
+                <SystemsStrip calls={inv.data?.tool_calls ?? []} statuses={systems.data.systems} running={!!running} />
+              </div>
+            )}
           </div>
           <form
             className="w-full space-y-2 sm:w-80"
@@ -185,6 +202,9 @@ export default function IncidentDetail() {
             {label}
             {key === "findings" && running && <Spinner className="ml-1.5 h-3 w-3 align-[-2px]" />}
             {key === "logs" && evidence.data && <span className="ml-1 text-xs text-slate-400">{evidence.data.logs.length}</span>}
+            {key === "systems" && !!inv.data?.tool_calls.length && (
+              <span className="ml-1 rounded-full bg-gradient-to-r from-sky-500 to-violet-500 px-1.5 text-[11px] font-semibold text-white">{inv.data.tool_calls.length}</span>
+            )}
             {key === "rca" && detail.data.rca_drafts.length > 0 && <span className="ml-1 text-xs text-slate-400">v{detail.data.rca_drafts[0].version}</span>}
           </button>
         ))}
@@ -208,6 +228,7 @@ export default function IncidentDetail() {
             onRun={() => start.mutate()}
           />
         )}
+        {tab === "systems" && <ToolResultsTab inv={inv.data} focus={focusRef} />}
         {tab === "similar" && <SimilarIncidents inv={inv.data} focus={focusRef} />}
         {tab === "rca" && <RcaPanel incidentKey={id} drafts={detail.data.rca_drafts} inv={inv.data} onEvidence={showEvidence} />}
       </div>

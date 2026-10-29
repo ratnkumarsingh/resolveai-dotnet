@@ -1,10 +1,11 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { betaTool } from "@anthropic-ai/sdk/helpers/beta/json-schema";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { InvestigationOutput, RcaOutput } from "@resolveai/shared";
 import type { z } from "zod";
 import type { EvidencePacket } from "../pipeline/packet.js";
-import { INVESTIGATION_SYSTEM, investigationUserMessage, RCA_SYSTEM, rcaUserMessage } from "./prompts.js";
-import { LlmError, type LlmProvider, type LlmResult, type RcaInput } from "./provider.js";
+import { FOLLOW_UP_SYSTEM, followUpUserMessage, INVESTIGATION_SYSTEM, investigationUserMessage, RCA_SYSTEM, rcaUserMessage } from "./prompts.js";
+import { type CallTool, type FollowUpTool, LlmError, type LlmProvider, type LlmResult, type RcaInput } from "./provider.js";
 
 /** Live provider: calls Claude server-side with a structured-output schema. */
 export class ClaudeProvider implements LlmProvider {
@@ -21,6 +22,39 @@ export class ClaudeProvider implements LlmProvider {
 
   draftRca(input: RcaInput) {
     return this.call(RcaOutput, RCA_SYSTEM, rcaUserMessage(input));
+  }
+
+  /**
+   * Lets Claude pick a few read-only tool calls to fill gaps in the evidence. The SDK tool runner drives
+   * the loop; every call goes through `call`, which records it and enforces the limit.
+   */
+  async followUp(packet: EvidencePacket, tools: FollowUpTool[], call: CallTool, maxCalls: number) {
+    const usage = { follow_up_input_tokens: 0, follow_up_output_tokens: 0, follow_up_turns: 0 };
+    try {
+      const runner = this.client.beta.messages.toolRunner({
+        model: this.model,
+        max_tokens: 4000,
+        // One turn per allowed call, plus the closing reply.
+        max_iterations: maxCalls + 1,
+        output_config: { effort: "low" },
+        system: FOLLOW_UP_SYSTEM,
+        messages: [{ role: "user", content: followUpUserMessage(packet, maxCalls) }],
+        tools: tools.map((t) => betaTool({
+          name: t.name,
+          description: t.description,
+          inputSchema: t.inputSchema as { type: "object" },
+          run: (args) => call(t.name, args as Record<string, unknown>),
+        })),
+      });
+      for await (const message of runner) {
+        usage.follow_up_input_tokens += message.usage.input_tokens;
+        usage.follow_up_output_tokens += message.usage.output_tokens;
+        usage.follow_up_turns++;
+      }
+    } catch (err) {
+      throw toLlmError(err);
+    }
+    return { usage };
   }
 
   private async call<S extends z.ZodType>(schema: S, system: string, content: string): Promise<LlmResult<z.infer<S>>> {

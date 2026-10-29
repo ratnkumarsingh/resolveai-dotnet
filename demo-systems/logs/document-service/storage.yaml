@@ -1,0 +1,4 @@
+# document-service storage settings (changed in v1.4.0)
+storage:
+  path: /mnt/invoices-archive   # v1.3.x wrote to /data/invoices
+  mode: write
