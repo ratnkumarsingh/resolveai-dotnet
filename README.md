@@ -7,18 +7,16 @@ ResolveAI pulls an incident's logs, deployments, metrics, runbooks and past inci
 ## Quick start
 
 ```bash
-npm install
-npm run seed        # optional; the API seeds an empty database on first start
-npm run dev         # API on http://127.0.0.1:8787, web on http://localhost:5173
+dotnet run --project src/ResolveAI.App      # the app and API on http://127.0.0.1:8787
 ```
 
-Open http://localhost:5173 and pick **INC-1042**.
+Open http://localhost:8787 and pick **INC-1042**. An empty database is seeded on first start.
 
-Requires Node 22.13+ (it uses the built-in `node:sqlite`; nothing native to compile).
+Requires the [.NET 10 SDK](https://dotnet.microsoft.com/download). Nothing else: the UI runs on the server (Blazor Server on ASP.NET Core) and its CSS is committed.
 
 ## Run in Docker (local deployment)
 
-One container serves both the API and the built web app. The port is published on `127.0.0.1` only, so nothing else on your network can reach it. Start Docker Desktop first.
+One container serves both the API and the UI, and runs the MCP servers as child processes. The port is published on `127.0.0.1` only, so nothing else on your network can reach it. Start Docker Desktop first.
 
 ```bash
 cp .env.example .env              # optional: add ANTHROPIC_API_KEY and LIVE_ACCESS_CODE for live runs
@@ -38,20 +36,21 @@ Open http://localhost:8787.
 | Remove everything | `docker compose down -v --rmi local` |
 
 - **Data:** SQLite lives in the named volume `resolveai-data` and survives restarts and rebuilds.
-- **Settings:** `.env` is read when present. The compose file pins `HOST`, `API_PORT`, `DB_PATH` and `WEB_DIST` for the container, so `.env` values for those are ignored there.
+- **Settings:** `.env` is read when present. The compose file pins `HOST`, `API_PORT` and `DB_PATH` for the container, so `.env` values for those are ignored there.
 - **Demo reset:** callers inside Docker arrive from the bridge network rather than loopback, so the compose file sets `DEMO_RESET_ANY_IP=true`. This is safe only because of the loopback-only port binding; don't publish the port more widely without removing it.
-- **Testing the container:** `BASE_URL=http://localhost:8787 npm run e2e` runs the browser test against it.
+- **Access code:** it is encrypted in the browser with keys kept inside the container, so after a rebuild it has to be entered again.
+- **Testing on Linux:** `docker build --target test .` runs the unit, golden and API tests inside the image's build.
 
 ## Systems the agent can check (MCP)
 
-Each system ResolveAI investigates has its own **read-only MCP server** in `mcp/`. The API starts them as child processes over stdio when it boots and lists them on the **Systems** page.
+Each system ResolveAI investigates has its own **read-only MCP server**, all in `src/ResolveAI.Mcp`. The app starts them as child processes over stdio when it boots and lists them on the **Systems** page. Children get an explicit, minimal environment, so the API key and access code never reach them.
 
 | System | Server | Tools |
 | --- | --- | --- |
-| Database | `mcp/src/sqlserver` (SQL Server) | `db_health`, `db_blocking`, `db_long_queries`, `db_deadlocks`, `db_errors`, `db_space`, `db_failed_jobs` |
-| Files & logs | `mcp/src/files` | `files_search`, `files_tail`, `files_recent_changes`, `files_disk_space`, `files_check` |
-| Deploys & Git | `mcp/src/deploys` | `deploys_recent`, `deploys_change_summary` |
-| Metrics & host | `mcp/src/metrics` | `metrics_series`, `metrics_list`, `metrics_host` |
+| Database | `ResolveAI.Mcp sqlserver` (`SqlServerServer.cs`) | `db_health`, `db_blocking`, `db_long_queries`, `db_deadlocks`, `db_errors`, `db_space`, `db_failed_jobs` |
+| Files & logs | `ResolveAI.Mcp files` (`FilesServer.cs`) | `files_search`, `files_tail`, `files_recent_changes`, `files_disk_space`, `files_check` |
+| Deploys & Git | `ResolveAI.Mcp deploys` (`DeploysServer.cs`) | `deploys_recent`, `deploys_change_summary` |
+| Metrics & host | `ResolveAI.Mcp metrics` (`MetricsServer.cs`) | `metrics_series`, `metrics_list`, `metrics_host` |
 
 **How an investigation uses them**
 1. **Baseline checks.** ResolveAI always runs the same checks for the incident's service and time window: errors and warnings in its log folders, recent deploys, its key metrics, and (if it has a database) health, blocking, errors and deadlocks.
@@ -60,27 +59,27 @@ Each system ResolveAI investigates has its own **read-only MCP server** in `mcp/
 
 **Read-only by design**
 - No tool runs arbitrary SQL or shell commands; each is a fixed, parameterised check. The hub only offers tools marked `readOnlyHint` and ignores anything else a server exposes.
-- Files: only inside `files.allowed_roots`; `..` and symlink/junction escapes are refused, binary files are skipped, and output is capped.
-- Git: `execFile` with fixed arguments, repos only from config, commit IDs must be hex.
+- Files: only inside `files.allowed_roots`; `..`, symlink/junction escapes in any path segment, device paths and alternate streams are refused, binary files are skipped, and output is capped.
+- Git: no shell, fixed arguments, repos only from config, commit IDs must be hex, with a time limit and an output cap.
 - SQL Server: every query runs as `EXECUTE AS LOGIN = 'resolveai_reader'`, a login with only `VIEW SERVER STATE` and `db_datareader`. So the server enforces read-only even when you connect with an admin Windows account.
 - Each call has a time limit, a 24-hour window cap and a row/size cap. A server that fails to start shows as *Not working* and never stops the API.
 
 **Configure** in `mcp.config.json` (copy `mcp.config.example.json`; the example is used when there is none). It maps each service to its log folders, git repo, database and key metrics, and sets the allowed folders. Secrets stay in `.env`.
 
-**SQL Server (off by default).** On this machine (Windows sign-in, ODBC Driver 17):
+**SQL Server (off by default).** On this machine (Windows sign-in):
 ```bash
 sqlcmd -S localhost -E -C -i demo-systems/sqlserver/setup.sql      # demo DB, resolveai_reader, resolveai_errors XE session
 # then in mcp.config.json: "sqlserver": { "enabled": true, "driver": "msnodesqlv8", "execute_as": "resolveai_reader" }
 ```
-To see a live blocking chain for INC-1046, run `demo-systems/sqlserver/scenario-blocking.sql` in two terminals (instructions are in the file; it rolls back), then investigate INC-1046. `teardown.sql` removes everything. In Docker, use `"driver": "tedious"` with a SQL login (`MSSQL_USER`/`MSSQL_PASSWORD`) over TCP.
+To see a live blocking chain for INC-1046, run `demo-systems/sqlserver/scenario-blocking.sql` in two terminals (instructions are in the file; it rolls back), then investigate INC-1046. `teardown.sql` removes everything. In Docker, use `"driver": "tedious"` with a SQL login (`MSSQL_USER`/`MSSQL_PASSWORD`) over TCP. Both driver names now use `Microsoft.Data.SqlClient`; the names are kept so existing config files stay valid.
 
 **Use them from Claude Code or Claude Desktop:** copy `.mcp.json.example` to `.mcp.json`.
 
-**Adding a system:** add a folder under `mcp/src/<name>/` with a `tools.ts` that registers tools through `readOnlyTool()` (it adds the timeout and error handling) and a `server.ts` entry. Then add it to `SERVER_DEFS` in `mcp/src/index.ts`, a colour in `web/src/components/systems.tsx`, and its baseline checks in `api/src/mcp/baseline.ts`.
+**Adding a system:** add a `<Name>Server.cs` in `src/ResolveAI.Mcp` that returns a `ToolServer` (it adds the timeout, input checks, read-only annotations and error handling). Then add it to `ServerDefs` in `Program.cs`, a colour in `SystemStyle` in `Components/Shared/Ui.cs`, and its baseline checks in `src/ResolveAI.App/Mcp/Baseline.cs`.
 
 ## Environment
 
-Copy `.env.example` to `.env`. All variables are server-side; none use the `VITE_` prefix, so none can reach the browser bundle.
+Copy `.env.example` to `.env`. All variables are server-side; the UI runs on the server, so none reach the browser. A variable already set in the real environment wins over the file.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
@@ -90,20 +89,20 @@ Copy `.env.example` to `.env`. All variables are server-side; none use the `VITE
 | `LIVE_ACCESS_CODE` | empty | With an API key, lets a run opt into live Claude while `LLM_MODE` stays `recorded`. The browser sends it from Settings → Access code. |
 | `LIVE_DAILY_LIMIT` | `20` | Maximum live model calls (investigations + RCA drafts) per UTC day; further live requests get HTTP 429. |
 | `DEMO_MODE` | `true` | Enables `POST /api/demo/reset` (from localhost, or with the access code). |
-| `DB_PATH` | `../data/resolveai.db` | SQLite file, relative to `api/`. |
+| `DB_PATH` | `data/resolveai.db` | SQLite file, relative to the repository root. |
 | `HOST` | `127.0.0.1` | Listen address. Docker uses `0.0.0.0` inside the container. |
-| `API_PORT` | `8787` | API port. |
-| `WEB_DIST` | empty | Serve a built web app from the API (set in Docker). |
+| `API_PORT` | `8787` | Port for the app and API. |
 | `MCP_ENABLED` | `true` | Start the MCP systems and check them during investigations. |
 | `MCP_MAX_FOLLOWUP_CALLS` | `8` | Most extra tool calls Claude may make per investigation (0–20). |
 | `RESOLVEAI_MCP_CONFIG` | empty | Path to the MCP config; defaults to `mcp.config.json`, then the example. |
 | `MSSQL_USER` / `MSSQL_PASSWORD` | empty | SQL Server reader login for the `tedious` driver only. |
+| `DEMO_RESET_ANY_IP` | `false` | Allow demo reset from any address. Set in Docker only; see above. |
 
 ### LLM modes
 
 - **recorded** (default): deterministic and runs without network access. INC-1042 replays a recorded analysis; other incidents get a rule-based analysis built from the same evidence packet. Both go through the same server-side validation as live output. Use this mode for a demo that must behave the same way every time.
 - **live on request** (recommended for shared demos): keep `LLM_MODE=recorded`, set `ANTHROPIC_API_KEY` and `LIVE_ACCESS_CODE`. Everyone gets recorded mode; a person with the code can tick *Use live Claude* on an incident. An RCA is drafted in the same mode as its investigation. Live calls are capped by `LIVE_DAILY_LIMIT`.
-- **live**: the server calls Claude through `@anthropic-ai/sdk` with structured JSON output (`output_config.format`, effort `medium`) and server-side refusal fallback (`fallbacks: "default"`). The response is then validated against the evidence packet.
+- **live**: the server calls Claude through the official `Anthropic` .NET SDK with structured JSON output (`output_config.format`, effort `medium`) and server-side refusal fallback (`fallbacks: "default"`). The response is then validated against the evidence packet.
 
 ## Demo script (3–4 minutes)
 
@@ -125,14 +124,18 @@ Other seeded cases:
 ## How it works
 
 ```
-web (React + Vite)  ──/api──▶  api (Fastify)  ──▶  SQLite (node:sqlite, FTS5)
-                                   │
-                                   ├─ evidence.ts   deterministic gathering (time window, same-service deploys)
-                                   ├─ similar.ts    FTS5 bm25 search over past incidents (no model choice)
-                                   ├─ packet.ts     sanitise → dedupe → bound (≤40 log groups, ≤24k chars), typed IDs
-                                   ├─ llm/          Claude (live) or recorded provider
-                                   └─ validate.ts   drop unknown citations, unsafe checks, clip sizes, score + rank
+Blazor Server UI ──┐
+                   ├──▶  AppService  ──▶  SQLite (Microsoft.Data.Sqlite, FTS5)
+HTTP API (/api) ───┘         │
+                             ├─ EvidenceLoader   deterministic gathering (time window, same-service deploys)
+                             ├─ Similar          FTS5 bm25 search over past incidents (no model choice)
+                             ├─ Packet           sanitise → dedupe → bound (≤40 log groups, ≤40k chars), typed IDs
+                             ├─ Llm/             Claude (live) or recorded provider
+                             ├─ Mcp/             hub that starts and calls the read-only MCP servers
+                             └─ Validate         drop unknown citations, unsafe checks, clip sizes, score + rank
 ```
+
+The UI and the API both go through `AppService`, so the access code, daily live limit, input limits and ownership checks apply to both. Blazor connections from other sites are refused by an Origin check, because the app has no login. Log and model text is always rendered as text, never as HTML.
 
 - **Typed evidence IDs** (`log:`, `dep:`, `met:`, `tl:`, `doc:`, `hist:`) are given to the model. Any citation the server can't find in the packet is removed and recorded under *Validation notes*. A hypothesis left with no valid evidence is marked **speculative** and forced to low confidence.
 - **Ranking score** = `2 × confidence weight (1/2/3) + min(supporting citations, 5) − counter-evidence count`. It is only used for ordering, never shown as a probability.
@@ -166,19 +169,25 @@ web (React + Vite)  ──/api──▶  api (Fastify)  ──▶  SQLite (node:
 ## Tests
 
 ```bash
-npm test            # Vitest: MCP servers, then pipeline + API (in-memory DB, recorded/scripted providers)
-MSSQL_TEST=1 npm test -w mcp   # also run every db_* tool against local SQL Server (after setup.sql)
-npm run e2e         # Playwright smoke: queue → investigation → evidence → similar → RCA edit/save/export
-npm run typecheck
+dotnet test tests/ResolveAI.Tests                 # MCP servers, pipeline, API and golden comparisons (in-memory DB)
+MSSQL_TEST=1 dotnet test tests/ResolveAI.Tests    # also run every db_* tool against local SQL Server (after setup.sql)
+dotnet test tests/ResolveAI.E2E                   # browser tests on a temporary database and a free port
 ```
 
-Covered: happy path, insufficient evidence, invalid evidence IDs, prompt injection, secret redaction, retry on malformed output, provider failure, RCA edit persistence and versioning, demo reset (including determinism across runs), log immutability, live access code / daily limit / reset rules, unverified-number flags, stage trace, review queue states, run history, and static serving for the Docker image. For the MCP systems: path and junction escapes, binary files and caps (files); feed + real git repo and argument injection (deploys); windows and peaks (metrics); allow-listed databases, degraded permissions and the `EXECUTE AS` wrapper (SQL Server); the hub ignoring non-read-only tools and timing out a hung one; baseline + follow-up calls cited as `mcp:N`; secrets in tool output redacted before the model; the follow-up limit; follow-up failure not failing the run; and starting the real servers as child processes.
+The browser tests need Chromium once: `pwsh tests/ResolveAI.E2E/bin/Debug/net10.0/playwright.ps1 install chromium`, or set `E2E_BROWSER_PATH` to an installed one.
+
+`tests/ResolveAI.Tests/Golden` holds what the original Node implementation returned: every route, investigation, evidence packet, RCA, prompt, output schema and tool result. The C# code is compared against it, so behaviour can't drift without a test failing.
+
+To change CSS classes, regenerate `wwwroot/app.css` with `npm install --prefix tools/css && node tools/css/build.mjs`. This is the only thing in the repository that uses Node.
+
+Covered: happy path, insufficient evidence, invalid evidence IDs, prompt injection, secret redaction, retry on malformed output, provider failure, RCA edit persistence and versioning, demo reset (including determinism across runs), log immutability, live access code / daily limit / reset rules, unverified-number flags, stage trace, review queue states and run history. For the MCP systems: path, junction, sibling-folder, device-path and alternate-stream escapes, binary files and caps (files); feed + real git repo and argument injection (deploys); windows and peaks (metrics); allow-listed databases, degraded permissions and the `EXECUTE AS` wrapper (SQL Server); the hub ignoring non-read-only tools and timing out a hung one; baseline + follow-up calls cited as `mcp:N`; secrets in tool output redacted before the model; the follow-up limit; follow-up failure not failing the run; starting the real servers as child processes; and proof that those children don't receive the API key or access code. `ClaudeProvider` is tested against a fake API: request contents, the tool loop, the iteration limit and error messages. In the browser: the full journey, filters, HTML in logs staying inert, encrypted access code storage, demo reset, phone-width layout and refused cross-site connections.
 
 ## Known limitations
 
 - The demo systems are synthetic (log files, a deploy feed and metric series in `demo-systems/`). SQL Server checks are real once enabled. Point `mcp.config.json` at real folders and repos to use your own.
 - Suggested next systems: an HTTP endpoint probe, message-queue backlog and dead letters, Kubernetes/cloud events, and config/feature-flag changes. Metrics could read Prometheus behind the same `metrics_series` tool.
-- No user accounts. The API binds to 127.0.0.1 (Docker: published on 127.0.0.1 only); the shared access code only gates paid live runs and remote reset.
+- No user accounts. The app binds to 127.0.0.1 (Docker: published on 127.0.0.1 only); the shared access code only gates paid live runs and remote reset.
+- The HTTP API has no cross-site protection of its own: a web page you visit could send a request to it on localhost, including `POST /api/demo/reset`. This predates the move to .NET. Set `DEMO_MODE=false` where that matters.
 - Retrieval is keyword/FTS5 only; there is no vector search.
 - Investigations run in-process. A server restart marks in-flight runs as failed.
 - Model confidence is qualitative and uncalibrated.
@@ -189,6 +198,6 @@ A similar open-source project ([AvinJoseph29/Settlement-Sentinel](https://github
 
 ## Deviations from the original spec
 
-- **SQLite (`node:sqlite`) instead of Supabase**, so a reviewer can run the app from this README with no cloud account. The schema maps directly to Postgres.
+- **SQLite instead of Supabase**, so a reviewer can run the app from this README with no cloud account. The schema maps directly to Postgres.
 - **The RCA comes from a separate call** after the investigation, instead of being part of the investigation output. This leaves one path for generating RCAs, and lets the RCA use engineer feedback.
 - **Added tables** `metric_snapshots`, `timeline_events`, `evidence_links` and `investigation_similar_incidents`, which the spec's UI and API needed but its data model lacked.

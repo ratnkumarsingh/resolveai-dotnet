@@ -81,6 +81,16 @@ public sealed partial class McpHub : IHub
         EnvironmentVariables = ServerEnv(env),
     };
 
+    /// <summary>
+    /// The protocol version is pinned because we ship both ends. Left unset, the client probes for a newer version with a short timeout and
+    /// falls back to the older handshake, which a slow-starting server then refuses, so a system would randomly show as not working on a busy machine.
+    /// </summary>
+    public static McpClientOptions ClientOptions() => new()
+    {
+        ClientInfo = new Implementation { Name = "resolveai", Version = "0.1.0" },
+        ProtocolVersion = "2025-11-25",
+    };
+
     /// <summary>Starts every enabled server as a child process over stdio. A server that fails to start is reported, not fatal.</summary>
     public static Task<McpHub> Start(McpConfig cfg, Func<string, string?>? env = null)
     {
@@ -101,7 +111,7 @@ public sealed partial class McpHub : IHub
             {
                 return new Connection { Def = e.Def, Status = "disabled", Detail = e.DisabledReason ?? "Turned off in mcp.config.json.", CheckedAt = at };
             }
-            Func<CancellationToken, Task<McpClient>> open = ct => McpClient.CreateAsync(e.Transport(), new McpClientOptions { ClientInfo = new Implementation { Name = "resolveai", Version = "0.1.0" } }, cancellationToken: ct);
+            Func<CancellationToken, Task<McpClient>> open = ct => McpClient.CreateAsync(e.Transport(), ClientOptions(), cancellationToken: ct);
             try
             {
                 using var startup = new CancellationTokenSource(StartTimeout);

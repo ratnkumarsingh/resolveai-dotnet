@@ -1,8 +1,8 @@
 {
   "mcpServers": {
-    "resolveai-files": { "command": "npx", "args": ["tsx", "mcp/src/files/server.ts"] },
-    "resolveai-deploys": { "command": "npx", "args": ["tsx", "mcp/src/deploys/server.ts"] },
-    "resolveai-metrics": { "command": "npx", "args": ["tsx", "mcp/src/metrics/server.ts"] },
-    "resolveai-sqlserver": { "command": "npx", "args": ["tsx", "mcp/src/sqlserver/server.ts"] }
+    "resolveai-files": { "command": "dotnet", "args": ["run", "--project", "src/ResolveAI.Mcp", "--", "files"] },
+    "resolveai-deploys": { "command": "dotnet", "args": ["run", "--project", "src/ResolveAI.Mcp", "--", "deploys"] },
+    "resolveai-metrics": { "command": "dotnet", "args": ["run", "--project", "src/ResolveAI.Mcp", "--", "metrics"] },
+    "resolveai-sqlserver": { "command": "dotnet", "args": ["run", "--project", "src/ResolveAI.Mcp", "--", "sqlserver"] }
   }
 }

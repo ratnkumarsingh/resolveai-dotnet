@@ -13,13 +13,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-dotnet@v4
         with:
-          node-version: 24
-          cache: npm
-      - run: npm ci
-      - run: npm run typecheck
-      - run: npm test
+          dotnet-version: 10.0.x
+      - run: dotnet build ResolveAI.sln
+      - name: Install the browser for the browser tests
+        run: pwsh tests/ResolveAI.E2E/bin/Debug/net10.0/playwright.ps1 install --with-deps chromium
+      - run: dotnet test ResolveAI.sln --no-build
 
   docker:
     runs-on: ubuntu-latest
@@ -31,7 +31,8 @@ jobs:
         run: |
           docker run -d --name resolveai -p 127.0.0.1:8787:8787 resolveai:ci
           for i in $(seq 1 30); do curl -fs http://127.0.0.1:8787/api/config && break; sleep 2; done
-          curl -fs http://127.0.0.1:8787/ | grep -q '<div id="root">'
+          curl -fs http://127.0.0.1:8787/ | grep -q 'blazor.web'
           curl -fs http://127.0.0.1:8787/api/incidents | grep -q 'INC-1042'
+          curl -fs http://127.0.0.1:8787/api/systems | grep -q '"status":"connected"'
       - if: always()
         run: docker logs resolveai || true

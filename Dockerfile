@@ -1,45 +1,33 @@
-# ResolveAI as a single container: the API serves both /api and the built web app.
+# ResolveAI as a single container: the app serves /api and the Blazor UI, and starts the MCP servers as child processes.
 
-# --- build: install everything and build the web bundle ---
-FROM node:24-slim AS build
-WORKDIR /app
-COPY package.json package-lock.json ./
-COPY shared/package.json shared/
-COPY mcp/package.json mcp/
-COPY api/package.json api/
-COPY web/package.json web/
-RUN npm ci
-COPY shared shared
-COPY web web
-RUN npm run build
+# --- build: restore and publish the app, which brings the MCP server executable with it ---
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
+COPY Directory.Build.props ./
+# Restore must see the source: it fetches Blazor's client script only when the project contains .razor files.
+COPY src src
+RUN dotnet publish src/ResolveAI.App -c Release -o /app
 
-# --- runtime: production dependencies for the API and the MCP servers ---
-FROM node:24-slim
-ENV NODE_ENV=production \
-    HOST=0.0.0.0 \
-    API_PORT=8787 \
-    DB_PATH=/app/data/resolveai.db \
-    WEB_DIST=/app/web/dist
-WORKDIR /app
-COPY package.json package-lock.json ./
-COPY shared/package.json shared/
-COPY mcp/package.json mcp/
-COPY api/package.json api/
-COPY web/package.json web/
-# msnodesqlv8 (Windows sign-in) is optional and is skipped on Linux; the container uses tedious + a SQL login.
-RUN npm ci --omit=dev -w api -w shared -w mcp && npm cache clean --force
-COPY shared/src shared/src
-COPY mcp/src mcp/src
-COPY api/src api/src
-# The demo systems the MCP servers read (log files, deploy feed, metric series) and their config.
+# --- test: optional, runs the tests on Linux: docker build --target test . ---
+FROM build AS test
+COPY tests/ResolveAI.Tests tests/ResolveAI.Tests
 COPY demo-systems demo-systems
 COPY mcp.config.example.json ./
-COPY --from=build /app/web/dist web/dist
+RUN dotnet test tests/ResolveAI.Tests
+
+# --- runtime: only the published app and the demo systems its MCP servers read ---
+FROM mcr.microsoft.com/dotnet/aspnet:10.0
+ENV HOST=0.0.0.0 \
+    API_PORT=8787 \
+    DB_PATH=/app/data/resolveai.db
+WORKDIR /app
+COPY --from=build /app .
+COPY demo-systems demo-systems
+COPY mcp.config.example.json ./
 # The SQLite file lives on a volume; the directory must be writable by the unprivileged user.
-RUN mkdir -p /app/data && chown node:node /app/data
-USER node
+RUN mkdir -p /app/data && chown "$APP_UID" /app/data
+USER $APP_UID
 EXPOSE 8787
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:8787/api/config').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
-WORKDIR /app/api
-CMD ["/app/node_modules/.bin/tsx", "src/server.ts"]
+  CMD ["/app/ResolveAI.App", "--healthcheck"]
+ENTRYPOINT ["/app/ResolveAI.App"]

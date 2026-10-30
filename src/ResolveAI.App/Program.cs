@@ -6,6 +6,21 @@ using ResolveAI.Mcp;
 
 AppSettings.LoadDotEnv(Path.Combine(McpConfig.RepoRoot(), ".env"));
 
+// The container's health check: the runtime image has no curl, so the app checks itself.
+if (args is ["--healthcheck"])
+{
+    using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+    try
+    {
+        var res = await http.GetAsync($"http://127.0.0.1:{AppSettings.Load().Port}/api/config");
+        return res.IsSuccessStatusCode ? 0 : 1;
+    }
+    catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
+    {
+        return 1;
+    }
+}
+
 // A published app serves its files from its own folder, wherever it was started from. Development uses the project folder.
 var isDevelopment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == Environments.Development;
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
@@ -66,6 +81,7 @@ app.Lifetime.ApplicationStarted.Register(() =>
     Console.WriteLine($"ResolveAI on http://{deps.Settings.Host}:{deps.Settings.Port} — recorded mode; live Claude: {live}");
 });
 
-app.Run();
+await app.RunAsync();
+return 0;
 
 public partial class Program;

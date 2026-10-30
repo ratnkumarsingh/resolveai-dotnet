@@ -1,11 +1,14 @@
+**/bin
+**/obj
 **/node_modules
-**/dist
 data
 *.db
 .env
 .env.*
 !.env.example
+mcp.config.json
 test-results
 playwright-report
 .git
 *.log
+!demo-systems/logs/**/*.log

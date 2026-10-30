@@ -83,12 +83,23 @@ public class HubTests
     {
         var path = Path.Combine(McpFixtures.RepoRoot, "mcp.config.example.json");
         await using var hub = await McpHub.Start(McpConfig.Load(path), k => k == "RESOLVEAI_MCP_CONFIG" ? path : Environment.GetEnvironmentVariable(k));
-        Assert.Equal(["disabled", "connected", "connected", "connected"], hub.Status().Select(s => s.Status));
+        // Compared with the details included, so a failure to start says why.
+        var statuses = hub.Status().Select(s => s.Status == "connected" || s.Status == "disabled" ? s.Status : $"{s.Status}: {s.Detail}").ToList();
+        var joined = string.Join(", ", statuses);
+        Assert.True(joined == "disabled, connected, connected, connected", joined);
         Assert.Contains("setup.sql", hub.Status()[0].Detail);
         var r = await hub.Call("files_search", new Dictionary<string, object?> { ["root"] = "payment-api", ["phrase"] = "pool exhausted" });
         Assert.True(r.Ok, r.Summary);
         Assert.Equal("logs/payment-api/app.log", r.Rows[0]["file"]);
         Assert.Equal(5L, r.Rows[0]["line"]);
+    }
+
+    /// <summary>An unpinned client races a version probe against the server's startup, and loses on a busy machine.</summary>
+    [Fact]
+    public void The_client_pins_the_protocol_version_so_no_version_probe_can_race_startup()
+    {
+        Assert.False(string.IsNullOrEmpty(McpHub.ClientOptions().ProtocolVersion));
+        Assert.NotEqual("2026-07-28", McpHub.ClientOptions().ProtocolVersion);
     }
 
     /// <summary>The servers run from the app's folder, whose libraries come from the shared framework; without this they crash at launch.</summary>

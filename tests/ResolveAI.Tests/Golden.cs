@@ -5,7 +5,10 @@ using ResolveAI.Contracts;
 
 namespace ResolveAI.Tests;
 
-/// <summary>Loads the files recorded from the Node implementation and compares against them, by the same rules as tools/golden/capture.mts.</summary>
+/// <summary>
+/// Loads the files recorded from the original Node implementation and compares against them. Random IDs, current times, file
+/// modified times and sizes, and durations are normalised, because they legitimately differ between runs.
+/// </summary>
 public static partial class Golden
 {
     private static readonly HashSet<string> VolatileKeys = ["duration_ms", "modified", "size_bytes", "characters", "cache_read_input_tokens"];
