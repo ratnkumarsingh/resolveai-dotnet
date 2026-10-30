@@ -11,3 +11,6 @@ test-results/
 mcp.config.json
 .mcp.json
 playwright-report/
+# .NET build output
+bin/
+obj/
