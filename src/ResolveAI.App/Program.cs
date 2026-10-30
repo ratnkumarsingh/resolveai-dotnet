@@ -34,9 +34,13 @@ var app = builder.Build();
 var deps = app.Services.GetRequiredService<AppDeps>();
 
 // An unknown page shows the app's not-found page. Only for page requests: other methods and the API keep their own status codes.
-app.UseWhen(
-    http => HttpMethods.IsGet(http.Request.Method) && !http.Request.Path.StartsWithSegments("/api") && !http.Request.Path.StartsWithSegments("/_blazor"),
-    page => page.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true));
+app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+app.Use((http, next) =>
+{
+    var isPage = HttpMethods.IsGet(http.Request.Method) && !http.Request.Path.StartsWithSegments("/api") && !http.Request.Path.StartsWithSegments("/_blazor");
+    if (!isPage && http.Features.Get<Microsoft.AspNetCore.Diagnostics.IStatusCodePagesFeature>() is { } pages) pages.Enabled = false;
+    return next();
+});
 app.UseApiErrors();
 app.UseCircuitOriginCheck();
 app.UseAntiforgery();
