@@ -1,0 +1,490 @@
+{
+  "sqlserver": [
+    {
+      "name": "db_health",
+      "description": "Point-in-time SQL Server health: sessions and blocked requests per database, the top waits since the server started, and memory/CPU.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "db_blocking",
+      "description": "Point-in-time blocking chains: which sessions are waiting on which, for how long, on what resource, and what the head blocker last ran.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "db_long_queries",
+      "description": "Requests that have been running for at least min_seconds right now, longest first, with their query text.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "min_seconds": {
+            "default": 30,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3600
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "db_deadlocks",
+      "description": "Deadlocks recorded by the system_health session between from and to: each process involved, its lock and query, and which one was the victim.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "description": "ISO-8601 UTC time, e.g. 2026-10-27T10:00:00Z"
+          },
+          "to": {
+            "type": "string",
+            "description": "ISO-8601 UTC time, e.g. 2026-10-27T10:00:00Z"
+          }
+        },
+        "required": [
+          "from"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "db_errors",
+      "description": "SQL Server errors between from and to: severe errors from system_health, plus severity 11+ errors (lock timeouts, conversion failures) if the optional resolveai_errors session is running. Optionally filter by a phrase in the message.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "description": "ISO-8601 UTC time, e.g. 2026-10-27T10:00:00Z"
+          },
+          "to": {
+            "type": "string",
+            "description": "ISO-8601 UTC time, e.g. 2026-10-27T10:00:00Z"
+          },
+          "phrase": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "from"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "db_space",
+      "description": "Data and log file sizes, used space and growth for one database, plus its state and why its log cannot be reused.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "database": {
+            "description": "One of: ResolveAIDemo",
+            "type": "string"
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "db_failed_jobs",
+      "description": "SQL Agent job steps that failed between from and to.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "description": "ISO-8601 UTC time, e.g. 2026-10-27T10:00:00Z"
+          },
+          "to": {
+            "type": "string",
+            "description": "ISO-8601 UTC time, e.g. 2026-10-27T10:00:00Z"
+          }
+        },
+        "required": [
+          "from"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    }
+  ],
+  "files": [
+    {
+      "name": "files_search",
+      "description": "Search text/log files under an allowed folder for lines containing a phrase (case-insensitive, plain text, not a regex). Optionally keep only lines whose leading timestamp falls between from and to.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "root": {
+            "type": "string",
+            "description": "Folder to search, absolute or relative to the first allowed root"
+          },
+          "phrase": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 200,
+            "description": "Plain text to look for, e.g. 'ERROR' or 'permission denied'"
+          },
+          "from": {
+            "type": "string",
+            "description": "ISO-8601 UTC time, e.g. 2026-10-27T10:00:00Z"
+          },
+          "to": {
+            "type": "string",
+            "description": "ISO-8601 UTC time, e.g. 2026-10-27T10:00:00Z"
+          },
+          "max_matches": {
+            "default": 50,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          }
+        },
+        "required": [
+          "root",
+          "phrase"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "files_tail",
+      "description": "Read the last lines of one text/log file inside an allowed folder.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "lines": {
+            "default": 50,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "files_recent_changes",
+      "description": "List files under an allowed folder that were modified at or after a time, newest first.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "root": {
+            "type": "string"
+          },
+          "since": {
+            "type": "string",
+            "description": "ISO-8601 UTC time, e.g. 2026-10-27T10:00:00Z"
+          }
+        },
+        "required": [
+          "root",
+          "since"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "files_disk_space",
+      "description": "Free and used space on the drive that holds an allowed folder.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "root": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "root"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "files_check",
+      "description": "Check one file or folder inside an allowed folder: whether it exists, its size and modified time, and whether it can be read and written.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    }
+  ],
+  "deploys": [
+    {
+      "name": "deploys_recent",
+      "description": "List deployments and commits for a service (or every service when service is omitted) between from and to, newest first.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string",
+            "description": "ISO-8601 UTC time, e.g. 2026-10-27T10:00:00Z"
+          },
+          "to": {
+            "type": "string",
+            "description": "ISO-8601 UTC time, e.g. 2026-10-27T10:00:00Z"
+          }
+        },
+        "required": [
+          "from"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "deploys_change_summary",
+      "description": "Show what one deployment or commit changed for a service: changed files with line counts and a short patch.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string"
+          },
+          "commit": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{4,40}$"
+          }
+        },
+        "required": [
+          "service",
+          "commit"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    }
+  ],
+  "metrics": [
+    {
+      "name": "metrics_list",
+      "description": "List the metric names available for a service.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "service"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "metrics_series",
+      "description": "Read one metric for a service between from and to, with its baseline (first value), peak and when the peak happened.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string",
+            "description": "ISO-8601 UTC time, e.g. 2026-10-27T10:00:00Z"
+          },
+          "to": {
+            "type": "string",
+            "description": "ISO-8601 UTC time, e.g. 2026-10-27T10:00:00Z"
+          }
+        },
+        "required": [
+          "service",
+          "name",
+          "from"
+        ],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "metrics_host",
+      "description": "Current CPU, memory and uptime of the machine this server runs on (a point-in-time reading, not history).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    }
+  ]
+}

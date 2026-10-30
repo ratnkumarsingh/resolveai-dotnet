@@ -1,0 +1,1097 @@
+[
+  {
+    "server": "sqlserver",
+    "tool": "db_health",
+    "args": {},
+    "outcome": {
+      "is_error": false,
+      "payload": {
+        "summary": "SQL Server 16.0.1210.3 at <now>: 3 user session(s), 1 blocked request(s); top wait since start: LCK_M_U.",
+        "rows": [
+          {
+            "section": "server",
+            "cpu_count": 8,
+            "physical_memory_mb": 16000,
+            "committed_mb": 900,
+            "target_mb": 12000,
+            "sqlserver_start_time": "2026-10-20T00:00:00.000Z",
+            "version": "16.0.1210.3",
+            "edition": "Developer Edition"
+          },
+          {
+            "section": "sessions",
+            "database_name": "ResolveAIDemo",
+            "sessions": 3,
+            "active_requests": 2,
+            "blocked_requests": 1
+          },
+          {
+            "section": "top_wait_since_start",
+            "wait_type": "LCK_M_U",
+            "waiting_tasks_count": 4,
+            "wait_time_ms": 90000
+          }
+        ],
+        "truncated": false,
+        "source": "sqlserver/localhost"
+      }
+    }
+  },
+  {
+    "server": "sqlserver",
+    "tool": "db_blocking",
+    "args": {},
+    "outcome": {
+      "is_error": false,
+      "payload": {
+        "summary": "1 blocked request(s) behind 1 head blocker(s) (session 61); longest wait 42s.",
+        "rows": [
+          {
+            "role": "head_blocker",
+            "session_id": 61,
+            "status": "sleeping",
+            "open_transaction_count": 1,
+            "last_request_end_time": "2026-10-27T17:01:00.000Z",
+            "program_name": "SQLCMD",
+            "last_query_text": "UPDATE dbo.Orders SET ReconciledAt = SYSUTCDATETIME() WHERE Status = N'open'"
+          },
+          {
+            "role": "blocked",
+            "session_id": 72,
+            "blocking_session_id": 61,
+            "database_name": "ResolveAIDemo",
+            "wait_type": "LCK_M_U",
+            "wait_ms": 42000,
+            "wait_resource": "OBJECT: 5:1:0",
+            "status": "suspended",
+            "command": "UPDATE",
+            "query_text": "UPDATE dbo.Orders SET Status = N'placed' WHERE OrderId = 1",
+            "program_name": "SQLCMD"
+          }
+        ],
+        "truncated": false,
+        "source": "sqlserver/localhost"
+      }
+    }
+  },
+  {
+    "server": "sqlserver",
+    "tool": "db_long_queries",
+    "args": {
+      "min_seconds": 5
+    },
+    "outcome": {
+      "is_error": false,
+      "payload": {
+        "summary": "1 request(s) running 5s or longer; longest 42s.",
+        "rows": [
+          {
+            "session_id": 72,
+            "database_name": "ResolveAIDemo",
+            "status": "suspended",
+            "command": "UPDATE",
+            "elapsed_s": 42,
+            "cpu_ms": 1,
+            "logical_reads": 3,
+            "wait_type": "LCK_M_U",
+            "query_text": "UPDATE dbo.Orders",
+            "program_name": "SQLCMD"
+          }
+        ],
+        "truncated": false,
+        "source": "sqlserver/localhost"
+      }
+    }
+  },
+  {
+    "server": "sqlserver",
+    "tool": "db_long_queries",
+    "args": {
+      "min_seconds": 0
+    },
+    "protocol": true,
+    "outcome": {
+      "rejected": true
+    }
+  },
+  {
+    "server": "sqlserver",
+    "tool": "db_long_queries",
+    "args": {
+      "min_seconds": 1.5
+    },
+    "protocol": true,
+    "outcome": {
+      "rejected": true
+    }
+  },
+  {
+    "server": "sqlserver",
+    "tool": "db_deadlocks",
+    "args": {
+      "from": "2026-10-27T09:30:00Z",
+      "to": "2026-10-27T18:30:00Z"
+    },
+    "outcome": {
+      "is_error": false,
+      "payload": {
+        "summary": "1 deadlock(s) between 2026-10-27T09:30:00.000Z and 2026-10-27T18:30:00.000Z.",
+        "rows": [
+          {
+            "time": "2026-10-27T17:03:00.000Z",
+            "process": "p1",
+            "spid": 72,
+            "database_name": "ResolveAIDemo",
+            "wait_resource": "KEY: 5:1",
+            "lock_mode": "U",
+            "query_text": "UPDATE dbo.Orders",
+            "victim": 1
+          }
+        ],
+        "truncated": false,
+        "source": "sqlserver/localhost"
+      }
+    }
+  },
+  {
+    "server": "sqlserver",
+    "tool": "db_errors",
+    "args": {
+      "from": "2026-10-27T09:30:00Z",
+      "to": "2026-10-27T18:30:00Z"
+    },
+    "outcome": {
+      "is_error": false,
+      "payload": {
+        "summary": "2 SQL Server error(s) in the window (most common: 1222 ×1, 17883 ×1).",
+        "rows": [
+          {
+            "time": "2026-10-27T17:02:10.000Z",
+            "error_number": 1222,
+            "severity": 16,
+            "message": "Lock request time out period exceeded.",
+            "database_name": "ResolveAIDemo",
+            "captured_by": "resolveai_errors"
+          },
+          {
+            "time": "2026-10-27T17:01:30.000Z",
+            "error_number": 17883,
+            "severity": 16,
+            "message": "Scheduler issue",
+            "captured_by": "system_health"
+          }
+        ],
+        "truncated": false,
+        "source": "sqlserver/localhost"
+      }
+    }
+  },
+  {
+    "server": "sqlserver",
+    "tool": "db_errors",
+    "args": {
+      "from": "2026-10-27T09:30:00Z",
+      "to": "2026-10-27T18:30:00Z",
+      "phrase": "lock"
+    },
+    "outcome": {
+      "is_error": false,
+      "payload": {
+        "summary": "1 SQL Server error(s) in the window (most common: 1222 ×1).",
+        "rows": [
+          {
+            "time": "2026-10-27T17:02:10.000Z",
+            "error_number": 1222,
+            "severity": 16,
+            "message": "Lock request time out period exceeded.",
+            "database_name": "ResolveAIDemo",
+            "captured_by": "resolveai_errors"
+          }
+        ],
+        "truncated": false,
+        "source": "sqlserver/localhost"
+      }
+    }
+  },
+  {
+    "server": "sqlserver",
+    "tool": "db_space",
+    "args": {},
+    "outcome": {
+      "is_error": false,
+      "payload": {
+        "summary": "ResolveAIDemo is ONLINE; log reuse wait: NOTHING; 1 file(s), 1 near max size.",
+        "rows": [
+          {
+            "section": "database",
+            "database_name": "ResolveAIDemo",
+            "state_desc": "ONLINE",
+            "recovery_model_desc": "SIMPLE",
+            "log_reuse_wait_desc": "NOTHING",
+            "is_read_only": false
+          },
+          {
+            "section": "file",
+            "file_name": "ResolveAIDemo",
+            "type_desc": "ROWS",
+            "size_mb": 8,
+            "used_mb": 7.5,
+            "max_mb": 8,
+            "growth": "10 MB"
+          }
+        ],
+        "truncated": false,
+        "source": "sqlserver/localhost"
+      }
+    }
+  },
+  {
+    "server": "sqlserver",
+    "tool": "db_space",
+    "args": {
+      "database": "master]; DROP TABLE x;--"
+    },
+    "outcome": {
+      "is_error": true,
+      "payload": {
+        "summary": "Database \"master]; DROP TABLE x;--\" is not in the allow-list (ResolveAIDemo).",
+        "rows": [],
+        "truncated": false,
+        "source": "error"
+      }
+    }
+  },
+  {
+    "server": "sqlserver",
+    "tool": "db_failed_jobs",
+    "args": {
+      "from": "2026-10-27T09:30:00Z",
+      "to": "2026-10-27T18:30:00Z"
+    },
+    "outcome": {
+      "is_error": false,
+      "payload": {
+        "summary": "1 failed job step(s) in the window; SQL Agent is stopped.",
+        "rows": [
+          {
+            "job_name": "Nightly",
+            "step_id": 1,
+            "step_name": "Run",
+            "run_at": "2026-10-27T17:00:00.000Z",
+            "message": "Failed"
+          }
+        ],
+        "truncated": false,
+        "source": "sqlserver/localhost"
+      }
+    }
+  },
+  {
+    "server": "sqlserver",
+    "tool": "db_errors",
+    "args": {
+      "from": "2026-10-01T00:00:00Z",
+      "to": "2026-10-27T00:00:00Z"
+    },
+    "outcome": {
+      "is_error": true,
+      "payload": {
+        "summary": "The time window is limited to 24 hours; narrow from/to.",
+        "rows": [],
+        "truncated": false,
+        "source": "error"
+      }
+    }
+  },
+  {
+    "server": "sqlserver",
+    "tool": "db_errors",
+    "args": {
+      "from": "not a date",
+      "to": "2026-10-27T18:30:00Z"
+    },
+    "outcome": {
+      "is_error": true,
+      "payload": {
+        "summary": "from/to must be ISO-8601 times.",
+        "rows": [],
+        "truncated": false,
+        "source": "error"
+      }
+    }
+  },
+  {
+    "server": "sqlserver",
+    "tool": "db_errors",
+    "args": {
+      "from": "2026-10-27T18:30:00Z",
+      "to": "2026-10-27T09:30:00Z"
+    },
+    "outcome": {
+      "is_error": true,
+      "payload": {
+        "summary": "to must be after from.",
+        "rows": [],
+        "truncated": false,
+        "source": "error"
+      }
+    }
+  },
+  {
+    "server": "files",
+    "tool": "files_search",
+    "args": {
+      "root": "payment-api",
+      "phrase": "ERROR"
+    },
+    "outcome": {
+      "is_error": false,
+      "payload": {
+        "summary": "6 line(s) containing \"ERROR\" in logs/payment-api (2 file(s) scanned).",
+        "rows": [
+          {
+            "file": "logs/payment-api/app.log",
+            "line": 6,
+            "time": "2026-10-27T10:04:12.403Z",
+            "text": "2026-10-27T10:04:12.403Z ERROR payment-api database connection acquisition timed out after 5000ms; request_id=req-781"
+          },
+          {
+            "file": "logs/payment-api/app.log",
+            "line": 7,
+            "time": "2026-10-27T10:04:15.118Z",
+            "text": "2026-10-27T10:04:15.118Z ERROR payment-api database connection acquisition timed out after 5000ms; request_id=req-782"
+          },
+          {
+            "file": "logs/payment-api/app.log",
+            "line": 8,
+            "time": "2026-10-27T10:04:20.640Z",
+            "text": "2026-10-27T10:04:20.640Z ERROR payment-api upstream request failed with HTTP 500"
+          },
+          {
+            "file": "logs/payment-api/app.log",
+            "line": 9,
+            "time": "2026-10-27T10:05:02.009Z",
+            "text": "2026-10-27T10:05:02.009Z ERROR payment-api database connection acquisition timed out after 5000ms; request_id=req-799"
+          },
+          {
+            "file": "logs/payment-api/app.log",
+            "line": 10,
+            "time": "2026-10-27T10:06:40.777Z",
+            "text": "2026-10-27T10:06:40.777Z ERROR payment-api charge retry failed for merchant m-2231; header Authorization: Bearer sk_live_51FAKEdemoTOKENdoNotUse9x; HTTP 500"
+          },
+          {
+            "file": "logs/payment-api/app.log",
+            "line": 11,
+            "time": "2026-10-27T10:08:30.300Z",
+            "text": "2026-10-27T10:08:30.300Z ERROR payment-api upstream request failed with HTTP 500"
+          }
+        ],
+        "truncated": false,
+        "source": "logs/payment-api"
+      }
+    }
+  },
+  {
+    "server": "files",
+    "tool": "files_search",
+    "args": {
+      "root": "payment-api",
+      "phrase": "error",
+      "from": "2026-10-27T10:04:00Z",
+      "to": "2026-10-27T10:05:00Z",
+      "max_matches": 2
+    },
+    "outcome": {
+      "is_error": false,
+      "payload": {
+        "summary": "2+ line(s) containing \"error\" in logs/payment-api (1 file(s) scanned).",
+        "rows": [
+          {
+            "file": "logs/payment-api/app.log",
+            "line": 6,
+            "time": "2026-10-27T10:04:12.403Z",
+            "text": "2026-10-27T10:04:12.403Z ERROR payment-api database connection acquisition timed out after 5000ms; request_id=req-781"
+          },
+          {
+            "file": "logs/payment-api/app.log",
+            "line": 7,
+            "time": "2026-10-27T10:04:15.118Z",
+            "text": "2026-10-27T10:04:15.118Z ERROR payment-api database connection acquisition timed out after 5000ms; request_id=req-782"
+          }
+        ],
+        "truncated": true,
+        "source": "logs/payment-api"
+      }
+    }
+  },
+  {
+    "server": "files",
+    "tool": "files_search",
+    "args": {
+      "root": "payment-api",
+      "phrase": "x"
+    },
+    "protocol": true,
+    "outcome": {
+      "rejected": true
+    }
+  },
+  {
+    "server": "files",
+    "tool": "files_search",
+    "args": {
+      "root": "..",
+      "phrase": "ERROR"
+    },
+    "outcome": {
+      "is_error": true,
+      "payload": {
+        "summary": "Path is outside the allowed folders: ..",
+        "rows": [],
+        "truncated": false,
+        "source": "error"
+      }
+    }
+  },
+  {
+    "server": "files",
+    "tool": "files_tail",
+    "args": {
+      "path": "payment-api/app.log",
+      "lines": 3
+    },
+    "outcome": {
+      "is_error": false,
+      "payload": {
+        "summary": "Last 3 line(s) of logs/payment-api/app.log (<n> bytes, modified <mtime>).",
+        "rows": [
+          {
+            "line": 9,
+            "text": "2026-10-27T10:05:02.009Z ERROR payment-api database connection acquisition timed out after 5000ms; request_id=req-799"
+          },
+          {
+            "line": 10,
+            "text": "2026-10-27T10:06:40.777Z ERROR payment-api charge retry failed for merchant m-2231; header Authorization: Bearer sk_live_51FAKEdemoTOKENdoNotUse9x; HTTP 500"
+          },
+          {
+            "line": 11,
+            "text": "2026-10-27T10:08:30.300Z ERROR payment-api upstream request failed with HTTP 500"
+          }
+        ],
+        "truncated": false,
+        "source": "logs/payment-api/app.log"
+      }
+    }
+  },
+  {
+    "server": "files",
+    "tool": "files_tail",
+    "args": {
+      "path": "document-service/mounts.txt",
+      "lines": 10
+    },
+    "outcome": {
+      "is_error": false,
+      "payload": {
+        "summary": "Last 3 line(s) of logs/document-service/mounts.txt (<n> bytes, modified <mtime>).",
+        "rows": [
+          {
+            "line": 1,
+            "text": "# Mount table captured by the node agent at 2026-10-27T11:16:00Z"
+          },
+          {
+            "line": 2,
+            "text": "/dev/sdb1  /data/invoices         ext4  rw,relatime"
+          },
+          {
+            "line": 3,
+            "text": "/dev/sdc1  /mnt/invoices-archive  ext4  ro,relatime"
+          }
+        ],
+        "truncated": false,
+        "source": "logs/document-service/mounts.txt"
+      }
+    }
+  },
+  {
+    "server": "files",
+    "tool": "files_tail",
+    "args": {
+      "path": "payment-api"
+    },
+    "outcome": {
+      "is_error": true,
+      "payload": {
+        "summary": "Not a file: payment-api",
+        "rows": [],
+        "truncated": false,
+        "source": "error"
+      }
+    }
+  },
+  {
+    "server": "files",
+    "tool": "files_tail",
+    "args": {
+      "path": "payment-api/missing.log"
+    },
+    "outcome": {
+      "is_error": true,
+      "payload": {
+        "summary": "Not a file: payment-api/missing.log",
+        "rows": [],
+        "truncated": false,
+        "source": "error"
+      }
+    }
+  },
+  {
+    "server": "files",
+    "tool": "files_tail",
+    "args": {
+      "path": "../../README.md"
+    },
+    "outcome": {
+      "is_error": true,
+      "payload": {
+        "summary": "Path is outside the allowed folders: ../../README.md",
+        "rows": [],
+        "truncated": false,
+        "source": "error"
+      }
+    }
+  },
+  {
+    "server": "files",
+    "tool": "files_check",
+    "args": {
+      "path": "payment-api/missing.log"
+    },
+    "outcome": {
+      "is_error": false,
+      "payload": {
+        "summary": "logs/payment-api/missing.log does not exist.",
+        "rows": [
+          {
+            "path": "logs/payment-api/missing.log",
+            "exists": false
+          }
+        ],
+        "truncated": false,
+        "source": "logs/payment-api/missing.log"
+      }
+    }
+  },
+  {
+    "server": "files",
+    "tool": "files_recent_changes",
+    "args": {
+      "root": "payment-api",
+      "since": "not a date"
+    },
+    "outcome": {
+      "is_error": true,
+      "payload": {
+        "summary": "since must be an ISO-8601 time.",
+        "rows": [],
+        "truncated": false,
+        "source": "error"
+      }
+    }
+  },
+  {
+    "server": "deploys",
+    "tool": "deploys_recent",
+    "args": {
+      "service": "payment-api",
+      "from": "2026-10-26T12:00:00Z",
+      "to": "2026-10-27T11:00:00Z"
+    },
+    "outcome": {
+      "is_error": false,
+      "payload": {
+        "summary": "1 deployment(s)/commit(s) for payment-api between 2026-10-26T12:00:00.000Z and 2026-10-27T11:00:00.000Z.",
+        "rows": [
+          {
+            "kind": "deployment",
+            "service": "payment-api",
+            "version": "v2.8.1",
+            "environment": "production",
+            "time": "2026-10-27T10:00:00Z",
+            "summary": "Database client configuration updated (connection pool settings moved to db-client.yaml)",
+            "commit": "7d03b1f",
+            "author": "dev-payments"
+          }
+        ],
+        "truncated": false,
+        "source": "deploys/payment-api"
+      }
+    }
+  },
+  {
+    "server": "deploys",
+    "tool": "deploys_recent",
+    "args": {
+      "from": "2026-10-27T00:00:00Z",
+      "to": "2026-10-27T20:00:00Z"
+    },
+    "outcome": {
+      "is_error": false,
+      "payload": {
+        "summary": "4 deployment(s)/commit(s) for all services between 2026-10-27T00:00:00.000Z and 2026-10-27T20:00:00.000Z.",
+        "rows": [
+          {
+            "kind": "deployment",
+            "service": "order-api",
+            "version": "v4.2.0",
+            "environment": "production",
+            "time": "2026-10-27T16:30:00Z",
+            "summary": "Run order reconciliation hourly instead of nightly",
+            "commit": "c90e4a7",
+            "author": "dev-orders"
+          },
+          {
+            "kind": "deployment",
+            "service": "document-service",
+            "version": "v1.4.0",
+            "environment": "production",
+            "time": "2026-10-27T11:15:00Z",
+            "summary": "Move invoice storage to the archive volume",
+            "commit": "b62f0d9",
+            "author": "dev-docs"
+          },
+          {
+            "kind": "deployment",
+            "service": "payment-api",
+            "version": "v2.8.1",
+            "environment": "production",
+            "time": "2026-10-27T10:00:00Z",
+            "summary": "Database client configuration updated (connection pool settings moved to db-client.yaml)",
+            "commit": "7d03b1f",
+            "author": "dev-payments"
+          },
+          {
+            "kind": "deployment",
+            "service": "checkout-web",
+            "version": "v5.2.0",
+            "environment": "production",
+            "time": "2026-10-27T09:30:00Z",
+            "summary": "New address autocomplete widget",
+            "commit": "e19a7c4",
+            "author": "dev-web"
+          }
+        ],
+        "truncated": false,
+        "source": "deploys"
+      }
+    }
+  },
+  {
+    "server": "deploys",
+    "tool": "deploys_recent",
+    "args": {
+      "service": "nope",
+      "from": "2026-10-27T09:30:00Z",
+      "to": "2026-10-27T18:30:00Z"
+    },
+    "outcome": {
+      "is_error": true,
+      "payload": {
+        "summary": "Unknown service \"nope\". Known: payment-api, search-api, notification-service, checkout-web, document-service, order-api.",
+        "rows": [],
+        "truncated": false,
+        "source": "error"
+      }
+    }
+  },
+  {
+    "server": "deploys",
+    "tool": "deploys_change_summary",
+    "args": {
+      "service": "payment-api",
+      "commit": "7d03b1f"
+    },
+    "outcome": {
+      "is_error": false,
+      "payload": {
+        "summary": "payment-api v2.8.1 (7d03b1f) changed 2 file(s): Database client configuration updated (connection pool settings moved to db-client.yaml)",
+        "rows": [
+          {
+            "path": "config/db-client.yaml",
+            "added": 4,
+            "removed": 0
+          },
+          {
+            "path": "src/db/pool.ts",
+            "added": 9,
+            "removed": 12
+          },
+          {
+            "patch": "--- a/src/db/pool.ts\n+++ b/src/db/pool.ts\n-  max: Number(process.env.DB_POOL_MAX ?? 100),\n+  max: fileConfig.pool.max,\n--- /dev/null\n+++ b/config/db-client.yaml\n+pool:\n+  max: 20\n+  acquireTimeoutMs: 5000\n"
+          }
+        ],
+        "truncated": false,
+        "source": "deploys/payment-api"
+      }
+    }
+  },
+  {
+    "server": "deploys",
+    "tool": "deploys_change_summary",
+    "args": {
+      "service": "payment-api",
+      "commit": "--output=/tmp/x"
+    },
+    "protocol": true,
+    "outcome": {
+      "rejected": true
+    }
+  },
+  {
+    "server": "deploys",
+    "tool": "deploys_change_summary",
+    "args": {
+      "service": "payment-api",
+      "commit": "abcdef1"
+    },
+    "outcome": {
+      "is_error": true,
+      "payload": {
+        "summary": "No deployment with commit abcdef1 for payment-api, and no repo is configured for it.",
+        "rows": [],
+        "truncated": false,
+        "source": "error"
+      }
+    }
+  },
+  {
+    "server": "metrics",
+    "tool": "metrics_list",
+    "args": {
+      "service": "payment-api"
+    },
+    "outcome": {
+      "is_error": false,
+      "payload": {
+        "summary": "3 metric(s) for payment-api: HTTP 500 rate, Latency p95, DB pool connections in use.",
+        "rows": [
+          {
+            "name": "HTTP 500 rate",
+            "unit": "%",
+            "points": 41
+          },
+          {
+            "name": "Latency p95",
+            "unit": "ms",
+            "points": 41
+          },
+          {
+            "name": "DB pool connections in use",
+            "unit": "connections",
+            "points": 41
+          }
+        ],
+        "truncated": false,
+        "source": "metrics/payment-api"
+      }
+    }
+  },
+  {
+    "server": "metrics",
+    "tool": "metrics_series",
+    "args": {
+      "service": "payment-api",
+      "name": "http 500 rate",
+      "from": "2026-10-27T09:30:00Z",
+      "to": "2026-10-27T11:30:00Z"
+    },
+    "outcome": {
+      "is_error": false,
+      "payload": {
+        "summary": "payment-api HTTP 500 rate: baseline 0.2 %, peak 28 % at 2026-10-27T10:03:00Z, average 12.4 % over 41 point(s).",
+        "rows": [
+          {
+            "time": "2026-10-27T09:40:00Z",
+            "value": 0.2,
+            "unit": "%"
+          },
+          {
+            "time": "2026-10-27T09:41:00Z",
+            "value": 0.2,
+            "unit": "%"
+          },
+          {
+            "time": "2026-10-27T09:42:00Z",
+            "value": 0.2,
+            "unit": "%"
+          },
+          {
+            "time": "2026-10-27T09:43:00Z",
+            "value": 0.2,
+            "unit": "%"
+          },
+          {
+            "time": "2026-10-27T09:44:00Z",
+            "value": 0.2,
+            "unit": "%"
+          },
+          {
+            "time": "2026-10-27T09:45:00Z",
+            "value": 0.2,
+            "unit": "%"
+          },
+          {
+            "time": "2026-10-27T09:46:00Z",
+            "value": 0.2,
+            "unit": "%"
+          },
+          {
+            "time": "2026-10-27T09:47:00Z",
+            "value": 0.2,
+            "unit": "%"
+          },
+          {
+            "time": "2026-10-27T09:48:00Z",
+            "value": 0.2,
+            "unit": "%"
+          },
+          {
+            "time": "2026-10-27T09:49:00Z",
+            "value": 0.2,
+            "unit": "%"
+          },
+          {
+            "time": "2026-10-27T09:50:00Z",
+            "value": 0.2,
+            "unit": "%"
+          },
+          {
+            "time": "2026-10-27T09:51:00Z",
+            "value": 0.2,
+            "unit": "%"
+          },
+          {
+            "time": "2026-10-27T09:52:00Z",
+            "value": 0.2,
+            "unit": "%"
+          },
+          {
+            "time": "2026-10-27T09:53:00Z",
+            "value": 0.2,
+            "unit": "%"
+          },
+          {
+            "time": "2026-10-27T09:54:00Z",
+            "value": 0.2,
+            "unit": "%"
+          },
+          {
+            "time": "2026-10-27T09:55:00Z",
+            "value": 0.2,
+            "unit": "%"
+          },
+          {
+            "time": "2026-10-27T09:56:00Z",
+            "value": 0.2,
+            "unit": "%"
+          },
+          {
+            "time": "2026-10-27T09:57:00Z",
+            "value": 0.2,
+            "unit": "%"
+          },
+          {
+            "time": "2026-10-27T09:58:00Z",
+            "value": 0.2,
+            "unit": "%"
+          },
+          {
+            "time": "2026-10-27T09:59:00Z",
+            "value": 0.2,
+            "unit": "%"
+          },
+          {
+            "time": "2026-10-27T10:00:00Z",
+            "value": 0.2,
+            "unit": "%"
+          },
+          {
+            "time": "2026-10-27T10:01:00Z",
+            "value": 0.2,
+            "unit": "%"
+          },
+          {
+            "time": "2026-10-27T10:02:00Z",
+            "value": 0.2,
+            "unit": "%"
+          },
+          {
+            "time": "2026-10-27T10:03:00Z",
+            "value": 28,
+            "unit": "%"
+          },
+          {
+            "time": "2026-10-27T10:04:00Z",
+            "value": 28,
+            "unit": "%"
+          },
+          {
+            "time": "2026-10-27T10:05:00Z",
+            "value": 28,
+            "unit": "%"
+          },
+          {
+            "time": "2026-10-27T10:06:00Z",
+            "value": 28,
+            "unit": "%"
+          },
+          {
+            "time": "2026-10-27T10:07:00Z",
+            "value": 28,
+            "unit": "%"
+          },
+          {
+            "time": "2026-10-27T10:08:00Z",
+            "value": 28,
+            "unit": "%"
+          },
+          {
+            "time": "2026-10-27T10:09:00Z",
+            "value": 28,
+            "unit": "%"
+          },
+          {
+            "time": "2026-10-27T10:10:00Z",
+            "value": 28,
+            "unit": "%"
+          },
+          {
+            "time": "2026-10-27T10:11:00Z",
+            "value": 28,
+            "unit": "%"
+          },
+          {
+            "time": "2026-10-27T10:12:00Z",
+            "value": 28,
+            "unit": "%"
+          },
+          {
+            "time": "2026-10-27T10:13:00Z",
+            "value": 28,
+            "unit": "%"
+          },
+          {
+            "time": "2026-10-27T10:14:00Z",
+            "value": 28,
+            "unit": "%"
+          },
+          {
+            "time": "2026-10-27T10:15:00Z",
+            "value": 28,
+            "unit": "%"
+          },
+          {
+            "time": "2026-10-27T10:16:00Z",
+            "value": 28,
+            "unit": "%"
+          },
+          {
+            "time": "2026-10-27T10:17:00Z",
+            "value": 28,
+            "unit": "%"
+          },
+          {
+            "time": "2026-10-27T10:18:00Z",
+            "value": 28,
+            "unit": "%"
+          },
+          {
+            "time": "2026-10-27T10:19:00Z",
+            "value": 28,
+            "unit": "%"
+          },
+          {
+            "time": "2026-10-27T10:20:00Z",
+            "value": 28,
+            "unit": "%"
+          }
+        ],
+        "truncated": false,
+        "source": "metrics/payment-api"
+      }
+    }
+  },
+  {
+    "server": "metrics",
+    "tool": "metrics_series",
+    "args": {
+      "service": "payment-api",
+      "name": "nope",
+      "from": "2026-10-27T09:30:00Z",
+      "to": "2026-10-27T18:30:00Z"
+    },
+    "outcome": {
+      "is_error": true,
+      "payload": {
+        "summary": "No metric \"nope\" for payment-api. Available: HTTP 500 rate, Latency p95, DB pool connections in use.",
+        "rows": [],
+        "truncated": false,
+        "source": "error"
+      }
+    }
+  },
+  {
+    "server": "metrics",
+    "tool": "metrics_series",
+    "args": {
+      "service": "payment-api",
+      "name": "HTTP 500 rate",
+      "from": "2020-01-01T00:00:00Z",
+      "to": "2020-01-01T01:00:00Z"
+    },
+    "outcome": {
+      "is_error": false,
+      "payload": {
+        "summary": "No HTTP 500 rate data for payment-api in that window.",
+        "rows": [],
+        "truncated": false,
+        "source": "metrics/payment-api"
+      }
+    }
+  },
+  {
+    "server": "metrics",
+    "tool": "metrics_series",
+    "args": {
+      "service": "../etc",
+      "name": "x",
+      "from": "2026-10-27T09:30:00Z",
+      "to": "2026-10-27T18:30:00Z"
+    },
+    "outcome": {
+      "is_error": true,
+      "payload": {
+        "summary": "service must be a plain service name.",
+        "rows": [],
+        "truncated": false,
+        "source": "error"
+      }
+    }
+  },
+  {
+    "server": "metrics",
+    "tool": "metrics_list",
+    "args": {
+      "service": "unknown-service"
+    },
+    "outcome": {
+      "is_error": true,
+      "payload": {
+        "summary": "No metrics recorded for service \"unknown-service\".",
+        "rows": [],
+        "truncated": false,
+        "source": "error"
+      }
+    }
+  }
+]
