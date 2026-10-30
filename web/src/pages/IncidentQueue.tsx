@@ -118,7 +118,7 @@ export default function IncidentQueue() {
                     <Link
                       to={`/incidents/${i.key}`}
                       onClick={(e) => e.stopPropagation()}
-                      className="rounded-md bg-indigo-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-indigo-700"
+                      className="inline-block whitespace-nowrap rounded-md bg-indigo-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-indigo-700"
                     >
                       Open incident
                     </Link>
