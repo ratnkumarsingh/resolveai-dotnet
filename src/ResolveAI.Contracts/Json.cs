@@ -28,7 +28,12 @@ public static class Json
         return options;
     }
 
+    /// <summary>JSON.stringify(value, null, 1): the formatting the model has always been sent.</summary>
+    public static readonly JsonSerializerOptions Pretty = new(Options) { WriteIndented = true, IndentSize = 1, NewLine = "\n" };
+
     public static string Serialize<T>(T value) => JsonSerializer.Serialize(value, Options);
+
+    public static string SerializePretty<T>(T value) => JsonSerializer.Serialize(value, Pretty);
 
     /// <summary>Parses a stored JSON column, returning the fallback when it is missing or malformed.</summary>
     public static T Parse<T>(string? value, T fallback)
@@ -124,6 +129,9 @@ public static class Js
         IFormattable x => x.ToString(null, CultureInfo.InvariantCulture),
         _ => v.ToString() ?? "",
     };
+
+    /// <summary>Math.round: halves go up, including for negative numbers.</summary>
+    public static double Round(double n) => Math.Floor(n + 0.5);
 
     /// <summary>A string slice by UTF-16 units, like String.prototype.slice for a non-negative range.</summary>
     public static string Clip(string s, int max) => s.Length > max ? s[..max] + "…" : s;

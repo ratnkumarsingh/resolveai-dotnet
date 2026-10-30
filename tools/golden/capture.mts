@@ -19,6 +19,11 @@ import { demoSystems, makeApp, runInvestigation } from "../../api/test/helpers.j
 import { RecordedProvider } from "../../api/src/llm/recorded.js";
 import { getInvestigationRow } from "../../api/src/services/investigations.js";
 import { SQL } from "../../mcp/src/sqlserver/queries.js";
+import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
+import { InvestigationOutput, RcaOutput } from "@resolveai/shared";
+import {
+  FOLLOW_UP_SYSTEM, followUpUserMessage, INVESTIGATION_SYSTEM, investigationUserMessage, PROMPT_VERSION, RCA_SYSTEM, rcaUserMessage,
+} from "../../api/src/llm/prompts.js";
 
 const OUT = join(dirname(fileURLToPath(import.meta.url)), "../../tests/ResolveAI.Tests/Golden");
 const STARTED = Date.now();
@@ -219,8 +224,41 @@ async function captureInvestigations() {
   save("investigations", runs);
 }
 
+/** Exact prompt text and formatting: the port must send the model the same bytes. */
+function capturePrompts() {
+  const packet = {
+    incident: { key: "INC-1", title: "T → x", service: "svc", severity: "SEV-1", environment: "production", started_at: "2026-10-27T10:00:00Z", detected_at: "2026-10-27T10:01:00Z", description: "d \"q\" <b> & 'y'", impact_summary: "i…" },
+    question: "is <it> the DB?",
+    items: [
+      { id: "log:1", type: "log" as const, timestamp: "2026-10-27T10:00:00Z", source: "app/svc", excerpt: "ERROR a×b", occurrences: 3 },
+      { id: "doc:1", type: "runbook" as const, timestamp: null, source: "runbook", excerpt: "line1\nline2" },
+    ],
+    similar_candidates: [], redactions: 0, truncated: false,
+  };
+  const noQuestion = { ...packet, question: null };
+  const rca = {
+    packet, summary: "s", verified_root_cause: null, engineer_notes: ["note"],
+    hypotheses: [{ rank: 1, title: "t", explanation: "e", confidence: "high", speculative: false, evidence_ids: ["log:1"], helpful: null }],
+    similar: [{ id: "hist:1", key: "INC-0", root_cause: "r", resolution: "f" }],
+  };
+  save("prompts", {
+    version: PROMPT_VERSION,
+    investigation_system: INVESTIGATION_SYSTEM,
+    rca_system: RCA_SYSTEM,
+    follow_up_system: FOLLOW_UP_SYSTEM,
+    investigation_user: investigationUserMessage(packet),
+    investigation_user_no_question: investigationUserMessage(noQuestion),
+    follow_up_user: followUpUserMessage(packet, 8),
+    follow_up_user_no_question: followUpUserMessage(noQuestion, 8),
+    rca_user: rcaUserMessage(rca),
+    investigation_schema: betaZodOutputFormat(InvestigationOutput).schema,
+    rca_schema: betaZodOutputFormat(RcaOutput).schema,
+  });
+}
+
 rmSync(OUT, { recursive: true, force: true });
 mkdirSync(OUT, { recursive: true });
+capturePrompts();
 await captureTools();
 await captureRoutes();
 await captureInvestigations();
