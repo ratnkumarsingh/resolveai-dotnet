@@ -1,0 +1,14 @@
+<span class="relative inline-flex h-2.5 w-2.5">
+    @if (Pulse && Status == "connected")
+    {
+        <span class="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60 motion-safe:animate-ping"></span>
+    }
+    <span class="@Ui.Cx("relative inline-flex h-2.5 w-2.5 rounded-full", Dot)"></span>
+</span>
+
+@code {
+    [Parameter, EditorRequired] public string Status { get; set; } = "";
+    [Parameter] public bool Pulse { get; set; }
+
+    private string Dot => Status switch { "connected" => "bg-emerald-500", "error" => "bg-red-500", _ => "bg-slate-300" };
+}

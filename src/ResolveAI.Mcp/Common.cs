@@ -124,11 +124,15 @@ public sealed partial class McpConfig
     /// <summary>Finds the repository (or the deployed app folder) by the committed example config.</summary>
     public static string RepoRoot()
     {
-        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+        // From the executable's folder for a normal build, then the working folder for a published copy run from the repository.
+        foreach (var start in new[] { AppContext.BaseDirectory, Directory.GetCurrentDirectory() })
         {
-            if (File.Exists(Path.Combine(dir.FullName, "mcp.config.example.json"))) return dir.FullName;
+            for (var dir = new DirectoryInfo(start); dir is not null; dir = dir.Parent)
+            {
+                if (File.Exists(Path.Combine(dir.FullName, "mcp.config.example.json"))) return dir.FullName;
+            }
         }
-        throw new InvalidOperationException("Could not find mcp.config.example.json above " + AppContext.BaseDirectory);
+        throw new InvalidOperationException($"Could not find mcp.config.example.json above {AppContext.BaseDirectory} or {Directory.GetCurrentDirectory()}");
     }
 
     /// <summary>Finds the config file: RESOLVEAI_MCP_CONFIG, then mcp.config.json, then the committed example.</summary>

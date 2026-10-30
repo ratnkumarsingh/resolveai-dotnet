@@ -1,0 +1,114 @@
+<div class="grid gap-4 lg:grid-cols-3">
+    <div class="space-y-4 lg:col-span-2">
+        <Card Title="Metrics (baseline → peak)">
+            @if (Evidence.Metrics.Count == 0)
+            {
+                <p class="text-sm text-slate-500">No metric snapshots recorded for this incident.</p>
+            }
+            else
+            {
+                <div class="grid gap-3 sm:grid-cols-2">
+                    @foreach (var m in Evidence.Metrics)
+                    {
+                        var big = Ui.MovedSharply(m);
+                        <div @key="m.Id" id="@Ui.RowId(m.Ref)" class="@Ui.Cx("rounded-md border border-slate-200 p-3", Flash(m.Ref))">
+                            <div class="text-xs text-slate-500">@m.Name</div>
+                            <div class="mt-1 flex items-baseline gap-2">
+                                <span class="text-sm text-slate-500">@Ui.Number(m.Baseline) →</span>
+                                <span class="@Ui.Cx("text-xl font-semibold", big ? "text-red-700" : "text-slate-800")">@Ui.Number(m.Peak)</span>
+                                <span class="text-xs text-slate-500">@m.Unit</span>
+                                <span class="@Ui.Cx("ml-auto rounded px-1.5 text-xs font-medium", big ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-600")">@Ratio(m.Baseline, m.Peak)</span>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </Card>
+
+        <Card Title="Error signals">
+            @if (Evidence.ErrorSignals.Count == 0)
+            {
+                <p class="text-sm text-slate-500">No error signatures found in the incident window.</p>
+            }
+            else
+            {
+                <table class="w-full text-sm">
+                    <thead class="text-left text-xs text-slate-500">
+                        <tr><th class="pb-2">Signature</th><th class="pb-2">Count</th><th class="pb-2">First seen</th><th class="pb-2">Last seen</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var s in Evidence.ErrorSignals)
+                        {
+                            <tr @key="s.Signature" class="border-t border-slate-100">
+                                <td class="py-1.5 font-mono text-xs">@s.Signature</td>
+                                <td class="py-1.5 font-semibold">@s.Count</td>
+                                <td class="py-1.5 text-xs text-slate-600">@Ui.FormatTime(s.FirstSeen)</td>
+                                <td class="py-1.5 text-xs text-slate-600">@Ui.FormatTime(s.LastSeen)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </Card>
+
+        <Card Title="Runbooks & guides">
+            @if (Evidence.Runbooks.Count == 0)
+            {
+                <p class="text-sm text-slate-500">No runbooks for this service.</p>
+            }
+            else
+            {
+                <ul class="space-y-3">
+                    @foreach (var r in Evidence.Runbooks)
+                    {
+                        <li @key="r.Id" id="@Ui.RowId(r.Ref)" class="@Ui.Cx("rounded-md", Flash(r.Ref))">
+                            <div class="text-sm font-medium">@r.Title</div>
+                            <p class="mt-0.5 text-sm text-slate-600">@r.Body</p>
+                        </li>
+                    }
+                </ul>
+            }
+        </Card>
+    </div>
+
+    <Card Title="Timeline">
+        @if (Evidence.Timeline.Count == 0)
+        {
+            <p class="text-sm text-slate-500">No timeline events.</p>
+        }
+        else
+        {
+            <ol class="relative space-y-4 border-l border-slate-200 pl-4">
+                @foreach (var e in Evidence.Timeline)
+                {
+                    <li @key="e.Id" id="@Ui.RowId(e.Ref)" class="@Ui.Cx("relative rounded", Flash(e.Ref))">
+                        <span class="@Ui.Cx("absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full ring-2 ring-white", Dot(e))"></span>
+                        <div class="text-xs text-slate-500">@Ui.FormatTime(e.Timestamp) · @e.Kind</div>
+                        <div class="text-sm">@e.Description</div>
+                    </li>
+                }
+            </ol>
+        }
+    </Card>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IncidentEvidence Evidence { get; set; } = new();
+    [Parameter] public string? Focus { get; set; }
+
+    private string? Flash(string reference) => Focus == reference ? "flash" : null;
+
+    private string Dot(TimelineEvent e) => e.Kind switch
+    {
+        "deployment" => "bg-indigo-500",
+        "alert" => "bg-red-500",
+        _ => Js.ParseDate(e.Timestamp) >= Js.ParseDate(Evidence.Incident.StartedAt) ? "bg-amber-500" : "bg-slate-400",
+    };
+
+    private static string Ratio(double baseline, double peak)
+    {
+        if (baseline == 0) return peak > 0 ? "new" : "flat";
+        var r = peak / baseline;
+        return r >= 1.5 ? $"×{(r >= 10 ? Js.Num(Js.Round(r)) : Ui.Fixed(r, 1))}" : r <= 0.67 ? $"×{Ui.Fixed(r, 2)}" : "≈ flat";
+    }
+}

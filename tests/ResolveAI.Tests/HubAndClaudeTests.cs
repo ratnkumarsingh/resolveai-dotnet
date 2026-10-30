@@ -91,6 +91,14 @@ public class HubTests
         Assert.Equal(5L, r.Rows[0]["line"]);
     }
 
+    /// <summary>The servers run from the app's folder, whose libraries come from the shared framework; without this they crash at launch.</summary>
+    [Fact]
+    public void The_server_executable_is_configured_for_the_framework_it_runs_on()
+    {
+        var config = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "ResolveAI.Mcp.runtimeconfig.json"));
+        Assert.Contains("Microsoft.AspNetCore.App", config);
+    }
+
     /// <summary>Runs a real child through the same transport options and reads back what it actually received.</summary>
     [Fact]
     public async Task Child_processes_never_receive_the_API_key_or_access_code()

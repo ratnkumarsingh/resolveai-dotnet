@@ -1,0 +1,49 @@
+@* Every system check of a run, grouped by system in a fixed order. *@
+@if (Inv is null)
+{
+    <Empty Title="No investigation yet">Run an investigation to check the database, files, deploys and metrics.</Empty>
+}
+else if (Inv.ToolCalls.Count == 0)
+{
+    <Empty Title="No system checks in this run">The MCP systems were off or nothing is configured for this service. See the Systems page.</Empty>
+}
+else
+{
+    <div class="space-y-6" data-testid="tool-results">
+        <p class="text-xs text-slate-500">
+            Raw results from each system, exactly as returned. Secrets are redacted before anything is sent to the model; the IDs (mcp:N) are what the findings cite.
+        </p>
+        @foreach (var sys in SystemStyle.Order.Where(s => Inv.ToolCalls.Any(c => c.System == s)))
+        {
+            var style = SystemStyle.Of(sys);
+            var mine = Inv.ToolCalls.Where(c => c.System == sys).ToList();
+            var failed = mine.Count(c => !c.Ok);
+            <section @key="sys" class="space-y-2">
+                <header class="@Ui.Cx("flex items-center gap-3 rounded-lg px-3 py-2 ring-1", style.Soft, style.Ring)">
+                    <SystemTile System="@sys" />
+                    <div>
+                        <h3 class="@Ui.Cx("text-sm font-semibold", style.Text)">@style.Label</h3>
+                        <p class="text-xs text-slate-600">
+                            @mine.Count check@(mine.Count == 1 ? "" : "s") · @mine.Count(c => c.Phase == "follow_up") follow-up
+                            @if (failed > 0)
+                            {
+                                <text> · <span class="font-medium text-red-700">@failed failed</span></text>
+                            }
+                        </p>
+                    </div>
+                </header>
+                <div class="space-y-2">
+                    @foreach (var c in mine)
+                    {
+                        <ToolCard @key="c.Ref" Call="c" Focused="@(Focus == c.Ref)" />
+                    }
+                </div>
+            </section>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public Investigation? Inv { get; set; }
+    [Parameter] public string? Focus { get; set; }
+}

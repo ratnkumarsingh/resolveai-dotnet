@@ -1,0 +1,16 @@
+<section class="@Ui.Cx("rounded-lg border border-slate-200 bg-white", Class)">
+    @if (Title is not null || TitleContent is not null)
+    {
+        <header class="flex items-center justify-between gap-2 border-b border-slate-100 px-4 py-2.5">
+            <h3 class="text-sm font-semibold text-slate-700">@Title@TitleContent</h3>
+        </header>
+    }
+    <div class="p-4">@ChildContent</div>
+</section>
+
+@code {
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public RenderFragment? TitleContent { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string? Class { get; set; }
+}

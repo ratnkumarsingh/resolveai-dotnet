@@ -1,0 +1,54 @@
+<div class="overflow-x-auto rounded-md border border-slate-200 bg-white">
+    <table class="w-full text-left text-xs">
+        <thead class="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
+            <tr>
+                @foreach (var c in Columns)
+                {
+                    <th class="whitespace-nowrap px-2 py-1.5 font-semibold">@c.Replace('_', ' ')</th>
+                }
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 font-mono">
+            @foreach (var r in _all ? Rows : Rows.Take(FirstRows).ToList())
+            {
+                <tr class="align-top">
+                    @foreach (var c in Columns)
+                    {
+                        <td class="@Ui.Cx("px-2 py-1 text-slate-700", IsLong(c) ? "min-w-64 whitespace-pre-wrap break-words" : "whitespace-nowrap")">@Cell(r.GetValueOrDefault(c))</td>
+                    }
+                </tr>
+            }
+        </tbody>
+    </table>
+    @if (Rows.Count > FirstRows)
+    {
+        <button type="button" @onclick="() => _all = !_all" class="w-full border-t border-slate-100 py-1 text-xs font-medium text-indigo-700 hover:bg-slate-50">
+            @(_all ? "Show fewer" : $"Show all {Rows.Count} rows")
+        </button>
+    }
+    @if (Keys.Count > MaxColumns)
+    {
+        <p class="border-t border-slate-100 px-2 py-1 text-[11px] text-slate-500">@(Keys.Count - MaxColumns) more column(s) in the raw JSON.</p>
+    }
+</div>
+
+@code {
+    private const int MaxColumns = 7;
+    private const int FirstRows = 8;
+
+    [Parameter, EditorRequired] public List<Dictionary<string, object?>> Rows { get; set; } = [];
+
+    private bool _all;
+
+    private List<string> Keys => Rows.SelectMany(r => r.Keys).Distinct().ToList();
+    private bool IsLong(string k) => Rows.Any(r => Cell(r.GetValueOrDefault(k)).Length > 60);
+    // Columns in first-seen order; long text (query text, patches) goes last so short columns stay readable.
+    private List<string> Columns => Keys.Where(k => !IsLong(k)).Concat(Keys.Where(IsLong)).Take(MaxColumns).ToList();
+
+    public static string Cell(object? v) => v switch
+    {
+        null => "—",
+        System.Collections.IDictionary or System.Collections.IList => Json.Serialize(v),
+        _ => Js.Str(v),
+    };
+}

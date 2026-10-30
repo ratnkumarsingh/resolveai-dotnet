@@ -1,0 +1,7 @@
+<span class="@Ui.Cx("rounded px-1.5 py-0.5 text-xs font-medium", Ui.Confidence(Confidence))" title="Qualitative model assessment, not a probability">
+    @Confidence confidence
+</span>
+
+@code {
+    [Parameter, EditorRequired] public string Confidence { get; set; } = "";
+}

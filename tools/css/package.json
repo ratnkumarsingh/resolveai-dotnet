@@ -1,0 +1,11 @@
+{
+  "name": "resolveai-css",
+  "private": true,
+  "type": "module",
+  "description": "Only needed to regenerate wwwroot/app.css after changing CSS classes; the app itself has no Node dependency.",
+  "dependencies": {
+    "@tailwindcss/node": "4.3.3",
+    "@tailwindcss/oxide": "4.3.3",
+    "tailwindcss": "4.3.3"
+  }
+}

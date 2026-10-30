@@ -1,0 +1,125 @@
+@inject AppService Service
+
+<article class="rounded-lg border border-slate-200 bg-white" data-testid="hypothesis">
+    <header class="flex flex-wrap items-start gap-2 border-b border-slate-100 px-4 py-3">
+        <span class="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-slate-900 text-xs font-semibold text-white">@H.Rank</span>
+        <h4 class="min-w-0 flex-1 font-semibold">@H.Title</h4>
+        <ConfidenceChip Confidence="@H.Confidence" />
+        @if (H.Speculative)
+        {
+            <span class="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-900">speculative</span>
+        }
+    </header>
+    <div class="space-y-4 p-4">
+        <p class="text-sm text-slate-700">@H.Explanation</p>
+
+        <div>
+            <h5 class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">Supporting evidence</h5>
+            @if (H.Evidence.Count == 0)
+            {
+                <p class="text-sm text-amber-800">No supporting records in the evidence packet.</p>
+            }
+            else
+            {
+                <ul class="space-y-1.5">
+                    @foreach (var e in H.Evidence)
+                    {
+                        <li @key="e.Ref">
+                            <button type="button" @onclick="() => OnEvidence.InvokeAsync(e.Ref)" class="group flex w-full items-start gap-2 rounded-md p-1.5 text-left text-sm hover:bg-slate-50"
+                                    title="Show source record" data-testid="evidence-link">
+                                <EvidenceChip Kind="@e.Kind" Label="@e.Label" />
+                                @if (!string.IsNullOrEmpty(e.Timestamp))
+                                {
+                                    <span class="shrink-0 font-mono text-xs leading-5 text-slate-500">@Ui.FormatTime(e.Timestamp, e.Kind == "hist").Replace(" UTC", "")</span>
+                                }
+                                @* A system check cites its one-line summary here; the rows are in the System checks tab. *@
+                                <span class="min-w-0 break-words text-slate-700 group-hover:text-indigo-700 group-hover:underline">@(e.Kind == "mcp" ? e.Excerpt.Split('\n')[0] : e.Excerpt)</span>
+                            </button>
+                        </li>
+                    }
+                </ul>
+            }
+        </div>
+
+        @if (H.CounterEvidence.Count > 0 || H.Unknowns.Count > 0)
+        {
+            <div class="grid gap-4 sm:grid-cols-2">
+                @if (H.CounterEvidence.Count > 0)
+                {
+                    <div>
+                        <h5 class="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Counter-evidence</h5>
+                        <ul class="list-disc space-y-0.5 pl-5 text-sm text-slate-700">
+                            @foreach (var c in H.CounterEvidence)
+                            {
+                                <li>@c</li>
+                            }
+                        </ul>
+                    </div>
+                }
+                @if (H.Unknowns.Count > 0)
+                {
+                    <div>
+                        <h5 class="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Unknowns</h5>
+                        <ul class="list-disc space-y-0.5 pl-5 text-sm text-slate-700">
+                            @foreach (var c in H.Unknowns)
+                            {
+                                <li>@c</li>
+                            }
+                        </ul>
+                    </div>
+                }
+            </div>
+        }
+
+        @if (H.RecommendedChecks.Count > 0)
+        {
+            <div>
+                <h5 class="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">Recommended checks <span class="font-normal normal-case">(for an engineer to perform — nothing is executed)</span></h5>
+                <div class="overflow-x-auto rounded-md border border-slate-200">
+                    <table class="w-full text-left text-sm">
+                        <thead class="bg-slate-50 text-xs text-slate-500"><tr><th class="px-3 py-1.5">Check</th><th class="px-3 py-1.5">Why</th><th class="px-3 py-1.5">Expected signal</th></tr></thead>
+                        <tbody class="divide-y divide-slate-100">
+                            @foreach (var c in H.RecommendedChecks)
+                            {
+                                <tr><td class="px-3 py-2 align-top">@c.Step</td><td class="px-3 py-2 align-top text-slate-600">@c.Why</td><td class="px-3 py-2 align-top text-slate-600">@c.ExpectedSignal</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+
+        <footer class="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3 text-sm">
+            <span class="text-slate-500">Was this hypothesis useful?</span>
+            <Btn Class="@(H.Feedback?.Helpful == true ? "border-emerald-400 bg-emerald-50 text-emerald-800" : null)" OnClick="() => Vote(true)">Useful</Btn>
+            <Btn Class="@(H.Feedback?.Helpful == false ? "border-red-300 bg-red-50 text-red-800" : null)" OnClick="() => Vote(false)">Not useful</Btn>
+            @if (_error is not null)
+            {
+                <span class="text-red-700">@_error</span>
+            }
+        </footer>
+    </div>
+</article>
+
+@code {
+    [Parameter, EditorRequired] public Hypothesis H { get; set; } = new();
+    [Parameter, EditorRequired] public string InvestigationId { get; set; } = "";
+    [Parameter] public EventCallback<string> OnEvidence { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private string? _error;
+
+    private async Task Vote(bool helpful)
+    {
+        _error = null;
+        try
+        {
+            Service.AddFeedback(InvestigationId, new FeedbackBody { HypothesisId = H.Id, Helpful = helpful });
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception err)
+        {
+            _error = Ui.Message(err);
+        }
+    }
+}

@@ -1,0 +1,5 @@
+<span class="@Ui.Cx("rounded-full px-2 py-0.5 text-xs font-medium capitalize ring-1", Ui.Status(Status))">@Status</span>
+
+@code {
+    [Parameter, EditorRequired] public string Status { get; set; } = "";
+}

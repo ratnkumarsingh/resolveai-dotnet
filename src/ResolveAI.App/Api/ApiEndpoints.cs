@@ -123,6 +123,22 @@ public static class ApiEndpoints
         api.MapFallback((HttpContext _) => JsonResult(new ErrorResponse { Error = "Not found" }, 404));
     }
 
+    /// <summary>
+    /// Refuses Blazor connections opened from other sites. WebSockets aren't covered by the browser's same-origin rules, and this app
+    /// has no login, so without this any web page could connect to a server on localhost. Non-browser clients send no Origin.
+    /// </summary>
+    public static IApplicationBuilder UseCircuitOriginCheck(this IApplicationBuilder app) => app.Use(async (http, next) =>
+    {
+        if (http.Request.Path.StartsWithSegments("/_blazor")
+            && http.Request.Headers.Origin.ToString() is { Length: > 0 } origin
+            && !(Uri.TryCreate(origin, UriKind.Absolute, out var uri) && string.Equals(uri.Authority, http.Request.Host.Value, StringComparison.OrdinalIgnoreCase)))
+        {
+            http.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return;
+        }
+        await next();
+    });
+
     /// <summary>Turns failures from /api into the { error } responses the API has always returned.</summary>
     public static IApplicationBuilder UseApiErrors(this IApplicationBuilder app) => app.Use(async (http, next) =>
     {

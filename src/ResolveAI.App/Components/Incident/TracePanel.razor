@@ -1,0 +1,88 @@
+@* The audit trail as a timeline: each stage, how long it took, what it reported, and every system call it made. *@
+@if (Trace.Count > 0)
+{
+    var total = Trace.Sum(t => t.DurationMs);
+    var slowest = Math.Max(1, Trace.Max(t => t.DurationMs));
+    var slowestCall = Math.Max(1, Calls.Count > 0 ? Calls.Max(c => c.DurationMs) : 1);
+    <details class="rounded-lg border border-slate-200 bg-white p-4 text-sm shadow-sm" data-testid="trace-panel">
+        <summary class="cursor-pointer font-medium text-slate-800">
+            How this was produced
+            <span class="font-normal text-slate-500">
+                · @Trace.Count stages · @Ui.Fixed(total / 1000d, 1) s@(Calls.Count > 0 ? $" · {Calls.Count} system checks" : "")
+            </span>
+        </summary>
+        <ol class="relative ml-2 mt-4 space-y-4 border-l-2 border-slate-100 pl-5">
+            @for (var i = 0; i < Trace.Count; i++)
+            {
+                var t = Trace[i];
+                var phase = t.Stage.StartsWith("Baseline", StringComparison.Ordinal) ? "baseline" : t.Stage.StartsWith("Follow-up", StringComparison.Ordinal) ? "follow_up" : null;
+                List<ToolCallRecord> stageCalls = phase is null ? [] : Calls.Where(c => c.Phase == phase).ToList();
+                <li @key="t.Stage" class="relative">
+                    <span class="@Ui.Cx("absolute -left-[31px] top-0.5 grid h-5 w-5 place-items-center rounded-full text-[10px] font-bold text-white ring-4 ring-white", Tone(t.Stage))">@(i + 1)</span>
+                    <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                        <span class="font-medium text-slate-800">@t.Stage</span>
+                        <span class="h-1.5 w-24 overflow-hidden rounded-full bg-slate-100" aria-hidden="true">
+                            <span class="@Ui.Cx("block h-full rounded-full", Tone(t.Stage))" style="width: @Width(t.DurationMs, slowest, 4)%"></span>
+                        </span>
+                        <span class="font-mono text-xs text-slate-500">@t.DurationMs ms</span>
+                    </div>
+                    <div class="mt-1 flex flex-wrap gap-1">
+                        @foreach (var (k, v) in t.Details)
+                        {
+                            <span class="rounded bg-slate-100 px-1.5 text-xs leading-5 text-slate-600">@k.Replace('_', ' '): @Detail(v)</span>
+                        }
+                    </div>
+                    @if (stageCalls.Count > 0)
+                    {
+                        <ul class="mt-2 space-y-1">
+                            @foreach (var c in stageCalls)
+                            {
+                                var s = SystemStyle.Of(c.System);
+                                <li @key="c.Ref" class="flex flex-wrap items-center gap-2 text-xs">
+                                    <span class="@Ui.Cx("h-2.5 w-2.5 shrink-0 rounded-full", c.Phase == "baseline" ? s.Dot : s.Hollow)" aria-hidden="true"></span>
+                                    <span class="@Ui.Cx("rounded px-1.5 py-0.5 font-mono font-medium", s.Chip)">@c.Tool</span>
+                                    @if (c.Phase == "follow_up")
+                                    {
+                                        <span class="font-semibold text-violet-700">@(Live ? "Claude asked" : "follow-up")</span>
+                                    }
+                                    @if (!c.Ok)
+                                    {
+                                        <span class="rounded bg-red-100 px-1 font-semibold text-red-700">failed</span>
+                                    }
+                                    <span class="h-1 w-16 overflow-hidden rounded-full bg-slate-100" aria-hidden="true">
+                                        <span class="@Ui.Cx("block h-full rounded-full", s.Bar)" style="width: @Width(c.DurationMs, slowestCall, 6)%"></span>
+                                    </span>
+                                    <span class="font-mono text-slate-500">@c.DurationMs ms</span>
+                                    <span class="min-w-0 flex-1 truncate text-slate-600" title="@c.Summary">@c.Summary</span>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </li>
+            }
+        </ol>
+    </details>
+}
+
+@code {
+    [Parameter] public List<TraceStage> Trace { get; set; } = [];
+    [Parameter] public List<ToolCallRecord> Calls { get; set; } = [];
+    [Parameter] public bool Live { get; set; }
+
+    private static string Detail(object? v) => v is bool b ? (b ? "yes" : "no") : Js.Str(v);
+
+    private static string Width(long value, long max, double minimum) => Js.Num(Math.Max(minimum, (double)value / max * 100));
+
+    /// <summary>Dot colour per pipeline stage, matched on the stage name.</summary>
+    private static string Tone(string stage) => stage switch
+    {
+        _ when stage.StartsWith("Gather", StringComparison.Ordinal) => "bg-slate-500",
+        _ when stage.StartsWith("Search", StringComparison.Ordinal) => "bg-violet-500",
+        _ when stage.StartsWith("Baseline", StringComparison.Ordinal) => "bg-gradient-to-br from-sky-500 to-indigo-600",
+        _ when stage.StartsWith("Build", StringComparison.Ordinal) => "bg-amber-500",
+        _ when stage.StartsWith("Follow-up", StringComparison.Ordinal) => "bg-gradient-to-br from-violet-500 to-fuchsia-600",
+        _ when stage.StartsWith("Analyse", StringComparison.Ordinal) => "bg-gradient-to-br from-indigo-500 to-violet-600",
+        _ when stage.StartsWith("Validate", StringComparison.Ordinal) => "bg-emerald-500",
+        _ => "bg-slate-400",
+    };
+}

@@ -1,0 +1,40 @@
+@* Facts computed directly from records, shown apart from anything the model inferred. *@
+<Card>
+    <TitleContent>
+        <span class="flex items-center gap-2">Observed facts <span class="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-600">from records — not AI</span></span>
+    </TitleContent>
+    <ChildContent>
+        @if (Facts.Count == 0)
+        {
+            <p class="text-sm text-slate-500">No error signals, recent deployments or significant metric changes in the records.</p>
+        }
+        else
+        {
+            <ul class="list-disc space-y-1 pl-5 text-sm text-slate-700">
+                @foreach (var f in Facts)
+                {
+                    <li @key="f">@f</li>
+                }
+            </ul>
+        }
+    </ChildContent>
+</Card>
+
+@code {
+    [Parameter, EditorRequired] public IncidentEvidence Evidence { get; set; } = new();
+
+    private List<string> Facts
+    {
+        get
+        {
+            var start = Js.ParseDate(Evidence.Incident.StartedAt);
+            double MinutesBefore(Deployment d) => (start - Js.ParseDate(d.DeployedAt)).TotalMinutes;
+            var facts = new List<string>();
+            if (Evidence.Logs.Find(l => l.Level == "ERROR") is { } firstError) facts.Add($"First error at {Ui.FormatTime(firstError.Timestamp)}: {firstError.Message}");
+            facts.AddRange(Evidence.ErrorSignals.Take(3).Select(s => $"{s.Count}× {s.Signature} between {Ui.FormatTime(s.FirstSeen)} and {Ui.FormatTime(s.LastSeen)}"));
+            facts.AddRange(Evidence.Deployments.Where(d => MinutesBefore(d) is >= 0 and <= 120).Select(d => $"{d.ServiceName} {d.Version} deployed {Js.Num(Js.Round(MinutesBefore(d)))} min before start: {d.ChangeSummary}"));
+            facts.AddRange(Evidence.Metrics.Where(Ui.MovedSharply).Select(m => $"{m.Name} rose from {Ui.Number(m.Baseline)} to {Ui.Number(m.Peak)} {m.Unit}"));
+            return facts.Distinct().ToList();
+        }
+    }
+}

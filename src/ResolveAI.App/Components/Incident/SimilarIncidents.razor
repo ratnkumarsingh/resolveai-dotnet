@@ -1,0 +1,23 @@
+@if (Inv is null || Inv.Status != "completed")
+{
+    <Empty Title="Similar incidents appear after an investigation">The search runs over past incidents and RCA notes as part of “Run investigation”.</Empty>
+}
+else if (Inv.SimilarIncidents.Count == 0)
+{
+    <Empty Title="No similar past incidents found">No historical incident shared enough symptoms, signatures or service context.</Empty>
+}
+else
+{
+    <div class="space-y-3">
+        <p class="text-xs text-slate-500">Retrieved by full-text search over past incidents, ranked by matching terms and service. The explanation of each match is model-written.</p>
+        @foreach (var s in Inv.SimilarIncidents)
+        {
+            <SimilarCard @key="s.Historical.Id" S="s" Focus="@Focus" />
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public Investigation? Inv { get; set; }
+    [Parameter] public string? Focus { get; set; }
+}

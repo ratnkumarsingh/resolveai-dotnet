@@ -1,0 +1,66 @@
+@inject AppService Service
+
+<Card Title="Record what was verified">
+    <form class="space-y-3" @onsubmit="Save" @onsubmit:preventDefault="true">
+        <label class="block text-sm">
+            <span class="text-slate-600">Verified root cause</span>
+            <input @bind="_cause" @bind:event="oninput" placeholder="e.g. pool.max set to 20 by v2.8.1 config change" class="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5" />
+        </label>
+        <label class="block text-sm">
+            <span class="text-slate-600">Investigation notes</span>
+            <textarea @bind="_comment" @bind:event="oninput" rows="2" placeholder="What you checked and what you saw" class="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5"></textarea>
+        </label>
+        <div class="flex flex-wrap items-center gap-2">
+            <select @bind="_hypothesisId" class="rounded-md border border-slate-300 px-2 py-1.5 text-sm" aria-label="Related hypothesis">
+                <option value="">Not tied to a hypothesis</option>
+                @foreach (var h in Inv.Hypotheses)
+                {
+                    <option value="@h.Id">#@h.Rank @h.Title[..Math.Min(60, h.Title.Length)]</option>
+                }
+            </select>
+            <Btn Type="submit" Variant="primary" Disabled="@(string.IsNullOrWhiteSpace(_cause) && string.IsNullOrWhiteSpace(_comment))">Save</Btn>
+            @if (_saved)
+            {
+                <span class="text-sm text-emerald-700">Saved. It will be used in the next RCA draft.</span>
+            }
+        </div>
+        @if (_error is not null)
+        {
+            <ErrorBox Message="@_error" />
+        }
+    </form>
+</Card>
+
+@code {
+    [Parameter, EditorRequired] public Investigation Inv { get; set; } = new();
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private string _cause = "";
+    private string _comment = "";
+    private string _hypothesisId = "";
+    private bool _saved;
+    private string? _error;
+
+    private async Task Save()
+    {
+        _error = null;
+        _saved = false;
+        try
+        {
+            Service.AddFeedback(Inv.Id, new FeedbackBody
+            {
+                HypothesisId = string.IsNullOrEmpty(_hypothesisId) ? null : _hypothesisId,
+                VerifiedRootCause = string.IsNullOrWhiteSpace(_cause) ? null : _cause.Trim(),
+                Comment = string.IsNullOrWhiteSpace(_comment) ? null : _comment.Trim(),
+            });
+            _cause = "";
+            _comment = "";
+            _saved = true;
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception err)
+        {
+            _error = Ui.Message(err);
+        }
+    }
+}

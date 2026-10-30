@@ -1,0 +1,65 @@
+<article id="@Ui.RowId(Call.Ref)" class="@Ui.Cx("rounded-lg border border-l-4 border-slate-200 bg-white p-3 shadow-sm", Style.Accent, Focused ? "flash" : null)" data-testid="tool-result">
+    <div class="flex flex-wrap items-center gap-2">
+        <span class="@Ui.Cx("rounded-md px-2 py-0.5 font-mono text-xs font-semibold", Style.Chip)">@Call.Tool</span>
+        @if (Call.Phase == "follow_up")
+        {
+            <span class="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-semibold text-violet-800" title="Claude chose to make this call">
+                <svg viewBox="0 0 16 16" class="h-3 w-3" fill="currentColor" aria-hidden="true"><path d="M8 0l1.8 5.2L15 7l-5.2 1.8L8 14l-1.8-5.2L1 7l5.2-1.8z" /></svg>
+                Follow-up
+            </span>
+        }
+        else
+        {
+            <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600" title="ResolveAI runs this check on every investigation">Baseline</span>
+        }
+        @if (!Call.Ok)
+        {
+            <span class="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">failed</span>
+        }
+        @if (Call.Truncated)
+        {
+            <span class="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800" title="More results existed than the limit">truncated</span>
+        }
+        <span class="ml-auto flex items-center gap-2 text-[11px] text-slate-500">
+            <span class="rounded bg-slate-100 px-1.5 py-0.5 font-mono font-medium text-slate-600">@Call.Ref</span>
+            <span>@Call.Rows.Count row@(Call.Rows.Count == 1 ? "" : "s")</span>
+            <span class="font-mono">@Call.DurationMs ms</span>
+        </span>
+    </div>
+    @if (Call.Args.Count > 0)
+    {
+        <div class="mt-1.5 flex flex-wrap gap-1">
+            @foreach (var (k, v) in Call.Args)
+            {
+                <span class="max-w-full truncate rounded bg-slate-50 px-1.5 py-0.5 font-mono text-[11px] text-slate-600 ring-1 ring-slate-200">
+                    @k=<span class="text-slate-800">@RowsTable.Cell(v)</span>
+                </span>
+            }
+        </div>
+    }
+    <p class="@Ui.Cx("mt-2 text-sm", Call.Ok ? "text-slate-800" : "text-red-800")">@Call.Summary</p>
+    @if (Call.Rows.Count > 0)
+    {
+        <div class="mt-2 space-y-1">
+            @if (_raw)
+            {
+                <pre class="max-h-80 overflow-auto rounded-md bg-slate-900 p-3 text-[11px] leading-relaxed text-slate-100">@System.Text.Json.JsonSerializer.Serialize(Call.Rows, RawOptions)</pre>
+            }
+            else
+            {
+                <RowsTable Rows="Call.Rows" />
+            }
+            <button type="button" @onclick="() => _raw = !_raw" class="text-xs font-medium text-indigo-700 hover:underline">@(_raw ? "Show as table" : "Show raw JSON")</button>
+        </div>
+    }
+</article>
+
+@code {
+    private static readonly System.Text.Json.JsonSerializerOptions RawOptions = new(Json.Options) { WriteIndented = true, IndentSize = 2, NewLine = "\n" };
+
+    [Parameter, EditorRequired] public ToolCallRecord Call { get; set; } = new();
+    [Parameter] public bool Focused { get; set; }
+
+    private bool _raw;
+    private SystemStyle Style => SystemStyle.Of(Call.System);
+}

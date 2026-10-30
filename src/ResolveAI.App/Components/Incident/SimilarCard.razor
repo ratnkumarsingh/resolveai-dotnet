@@ -1,0 +1,65 @@
+@inject AppService Service
+
+<article id="@Ui.RowId(H.Ref)" class="@Ui.Cx("rounded-lg border border-slate-200 bg-white p-4", Focus == H.Ref ? "flash" : null)" data-testid="similar-incident">
+    <header class="flex flex-wrap items-baseline gap-2">
+        <span class="font-mono text-xs text-slate-500">@H.Key</span>
+        <h4 class="font-semibold">@H.Title</h4>
+        <span class="font-mono text-xs text-slate-500">@H.ServiceName</span>
+        <span class="ml-auto text-xs text-slate-500">resolved @Ui.FormatTime(H.ResolvedAt, true)[..10]</span>
+    </header>
+    <p class="mt-2 text-sm"><span class="font-medium text-violet-800">Why it matches: </span>@S.SimilarityReason</p>
+    <dl class="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+        <div><dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">Prior root cause</dt><dd>@H.RootCause</dd></div>
+        <div><dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">Resolution</dt><dd>@H.Resolution</dd></div>
+    </dl>
+    <div class="mt-3 flex flex-wrap items-center gap-1.5">
+        @foreach (var t in S.MatchedTerms.Take(8))
+        {
+            <span @key="t" class="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">@t</span>
+        }
+        @if (!string.IsNullOrEmpty(H.RcaDocumentId))
+        {
+            <Btn Variant="ghost" Class="ml-auto" OnClick="Toggle">@(_open ? "Hide historical RCA" : "View historical RCA")</Btn>
+        }
+    </div>
+    @if (_open)
+    {
+        <div class="mt-3">
+            @if (_error is not null)
+            {
+                <ErrorBox Message="@_error" />
+            }
+            else if (_doc is not null)
+            {
+                <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
+                    <div class="text-sm font-medium">@_doc.Title</div>
+                    <p class="mt-1 whitespace-pre-line text-sm text-slate-700">@_doc.Body</p>
+                </div>
+            }
+        </div>
+    }
+</article>
+
+@code {
+    [Parameter, EditorRequired] public SimilarIncidentResult S { get; set; } = new();
+    [Parameter] public string? Focus { get; set; }
+
+    private bool _open;
+    private KnowledgeBody? _doc;
+    private string? _error;
+    private HistoricalIncident H => S.Historical;
+
+    private void Toggle()
+    {
+        _open = !_open;
+        if (!_open || _doc is not null) return;
+        try
+        {
+            _doc = Service.Knowledge(H.RcaDocumentId!);
+        }
+        catch (Exception err)
+        {
+            _error = Ui.Message(err);
+        }
+    }
+}

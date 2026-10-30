@@ -6,7 +6,13 @@ using ResolveAI.Mcp;
 
 AppSettings.LoadDotEnv(Path.Combine(McpConfig.RepoRoot(), ".env"));
 
-var builder = WebApplication.CreateBuilder(args);
+// A published app serves its files from its own folder, wherever it was started from. Development uses the project folder.
+var isDevelopment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == Environments.Development;
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+{
+    Args = args,
+    ContentRootPath = isDevelopment ? null : AppContext.BaseDirectory,
+});
 
 var settings = AppSettings.Load();
 builder.WebHost.UseUrls($"http://{settings.Host}:{settings.Port}");
@@ -20,13 +26,19 @@ builder.Services.AddSingleton(sp =>
     var deps = sp.GetRequiredService<AppDeps>();
     return new AppService(deps.Db, deps.Providers, deps.Systems, deps.Settings);
 });
+builder.Services.AddScoped<AccessCodeStore>();
 
 var app = builder.Build();
 
 // Build everything before accepting requests, so the first request doesn't pay for starting the MCP servers.
 var deps = app.Services.GetRequiredService<AppDeps>();
 
+// An unknown page shows the app's not-found page. Only for page requests: other methods and the API keep their own status codes.
+app.UseWhen(
+    http => HttpMethods.IsGet(http.Request.Method) && !http.Request.Path.StartsWithSegments("/api") && !http.Request.Path.StartsWithSegments("/_blazor"),
+    page => page.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true));
 app.UseApiErrors();
+app.UseCircuitOriginCheck();
 app.UseAntiforgery();
 
 app.MapStaticAssets();

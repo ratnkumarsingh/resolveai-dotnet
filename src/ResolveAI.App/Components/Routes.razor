@@ -1,6 +1,12 @@
-﻿<Router AppAssembly="typeof(Program).Assembly" NotFoundPage="typeof(Pages.NotFound)">
-    <Found Context="routeData">
-        <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
-        <FocusOnNavigate RouteData="routeData" Selector="h1" />
-    </Found>
-</Router>
+﻿<CascadingValue Value="IsLocal" Name="IsLocal">
+    <Router AppAssembly="typeof(Program).Assembly" NotFoundPage="typeof(Pages.NotFound)">
+        <Found Context="routeData">
+            <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
+        </Found>
+    </Router>
+</CascadingValue>
+
+@code {
+    /// <summary>Passed from the page request. The framework signs component parameters, so the browser can't change it.</summary>
+    [Parameter] public bool IsLocal { get; set; }
+}

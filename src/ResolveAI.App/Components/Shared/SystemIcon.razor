@@ -1,0 +1,27 @@
+<svg viewBox="0 0 24 24" class="@Class" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    @switch (System)
+    {
+        case "database":
+            <ellipse cx="12" cy="5.5" rx="7" ry="2.5" />
+            <path d="M5 5.5v6c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-6M5 11.5v6c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-6" />
+            break;
+        case "files":
+            <path d="M6 3h8l4 4v14H6z" />
+            <path d="M14 3v4h4M9 12h6M9 16h6" />
+            break;
+        case "deploys":
+            <circle cx="6" cy="6" r="2.2" />
+            <circle cx="6" cy="18" r="2.2" />
+            <circle cx="18" cy="9" r="2.2" />
+            <path d="M6 8.2v7.6M18 11.2c0 3-3 3.8-6 4.3-2.4.4-4.6 1-5.6 2" />
+            break;
+        default:
+            <path d="M3 17l5-6 4 4 4-7 5 9M3 21h18" />
+            break;
+    }
+</svg>
+
+@code {
+    [Parameter, EditorRequired] public string System { get; set; } = "";
+    [Parameter] public string Class { get; set; } = "h-4 w-4";
+}

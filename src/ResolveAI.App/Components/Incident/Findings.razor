@@ -1,0 +1,113 @@
+@if (Inv is null)
+{
+    <div class="space-y-4">
+        @if (Evidence is not null)
+        {
+            <ObservedFacts Evidence="Evidence" />
+        }
+        <Empty Title="No investigation yet">
+            <p>Run an investigation to gather evidence, search past incidents and get ranked hypotheses.</p>
+            <Btn Variant="primary" Class="mt-3" OnClick="OnRun">Run investigation</Btn>
+        </Empty>
+    </div>
+}
+else if (Inv.Status is "queued" or "running")
+{
+    <div class="rounded-lg border border-indigo-200 bg-indigo-50 p-6" role="status" data-testid="investigation-running">
+        <div class="flex items-center gap-3 text-indigo-900">
+            <Spinner Class="h-5 w-5" />
+            <div>
+                <div class="font-medium">Investigation in progress</div>
+                <div class="text-sm text-indigo-800">@(Inv.Stage ?? "Queued")…</div>
+            </div>
+        </div>
+    </div>
+}
+else if (Inv.Status == "failed")
+{
+    <div class="space-y-4">
+        <ErrorBox Message="@(Inv.ErrorMessage ?? "The investigation failed.")" OnRetry="OnRun" />
+        @if (Evidence is not null)
+        {
+            <ObservedFacts Evidence="Evidence" />
+        }
+    </div>
+}
+else
+{
+    <div class="space-y-4" data-testid="investigation-results">
+        @if (Evidence is not null)
+        {
+            <ObservedFacts Evidence="Evidence" />
+        }
+
+        <section class="rounded-lg border border-violet-200 bg-violet-50/50 p-4">
+            <div class="mb-2 flex flex-wrap items-center gap-2">
+                <h3 class="text-sm font-semibold text-slate-800">Inferred analysis</h3>
+                <AiBadge>@(Inv.LlmMode == "live" ? $"AI-generated ({Inv.ModelName ?? "Claude"}) — not confirmed" : "Recorded analysis — not confirmed")</AiBadge>
+                <span class="ml-auto text-xs text-slate-500">
+                    @Inv.EvidenceCount evidence records · completed @Ui.FormatTime(Inv.CompletedAt) · prompt @Inv.PromptVersion
+                </span>
+            </div>
+            <p class="text-sm text-slate-800">@Inv.Summary</p>
+            @if (!string.IsNullOrEmpty(Inv.Question))
+            {
+                <p class="mt-2 text-xs text-slate-500">Question asked: “@Inv.Question”</p>
+            }
+        </section>
+
+        @if (Inv.InsufficientEvidence)
+        {
+            <div class="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900" data-testid="insufficient-evidence">
+                <strong>Insufficient evidence.</strong> The available records don't support a root-cause hypothesis. Gather more logs, metrics or change history and run the investigation again.
+            </div>
+        }
+
+        <div class="space-y-3">
+            @foreach (var h in Inv.Hypotheses)
+            {
+                <HypothesisCard @key="h.Id" H="h" InvestigationId="@Inv.Id" OnEvidence="OnEvidence" OnChanged="OnChanged" />
+            }
+        </div>
+
+        @if (Inv.Limitations.Count > 0 || Inv.ValidationIssues.Count > 0)
+        {
+            <div class="grid gap-4 md:grid-cols-2">
+                @if (Inv.Limitations.Count > 0)
+                {
+                    <Card Title="Limitations">
+                        <ul class="list-disc space-y-1 pl-5 text-sm text-slate-700">
+                            @foreach (var l in Inv.Limitations)
+                            {
+                                <li>@l</li>
+                            }
+                        </ul>
+                    </Card>
+                }
+                @if (Inv.ValidationIssues.Count > 0)
+                {
+                    <Card Title="Validation notes">
+                        <ul class="list-disc space-y-1 pl-5 text-sm text-slate-600">
+                            @foreach (var l in Inv.ValidationIssues)
+                            {
+                                <li>@l</li>
+                            }
+                        </ul>
+                    </Card>
+                }
+            </div>
+        }
+
+        <TracePanel Trace="Inv.Trace" Calls="Inv.ToolCalls" Live="@(Inv.LlmMode == "live")" />
+
+        <VerifiedCauseForm @key="Inv.Id" Inv="Inv" OnChanged="OnChanged" />
+    </div>
+}
+
+@code {
+    [Parameter] public Investigation? Inv { get; set; }
+    [Parameter] public IncidentEvidence? Evidence { get; set; }
+    [Parameter] public EventCallback<string> OnEvidence { get; set; }
+    [Parameter] public EventCallback OnRun { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+}

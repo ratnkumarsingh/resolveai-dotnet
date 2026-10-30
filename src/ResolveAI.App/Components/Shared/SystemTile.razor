@@ -1,0 +1,12 @@
+<span class="@Ui.Cx("grid shrink-0 place-items-center text-white shadow-sm", Box, SystemStyle.Of(System).Tile)">
+    <SystemIcon System="@System" Class="@Icon" />
+</span>
+
+@code {
+    [Parameter, EditorRequired] public string System { get; set; } = "";
+    /// <summary>A gradient tile with the system's icon, for headers and cards: sm, md or lg.</summary>
+    [Parameter] public string Size { get; set; } = "md";
+
+    private string Box => Size switch { "lg" => "h-12 w-12 rounded-xl", "md" => "h-9 w-9 rounded-lg", _ => "h-6 w-6 rounded-md" };
+    private string Icon => Size switch { "lg" => "h-6 w-6", "md" => "h-5 w-5", _ => "h-3.5 w-3.5" };
+}

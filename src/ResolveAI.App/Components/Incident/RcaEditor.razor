@@ -1,0 +1,168 @@
+@inject AppService Service
+@inject IJSRuntime JS
+
+<div class="space-y-4 rounded-lg border border-slate-200 bg-white p-4" data-testid="rca-editor">
+    <div class="flex flex-wrap items-center gap-2">
+        <AiBadge>@(Rca.LlmMode == "live" ? "AI-generated draft" : "Recorded draft") — review required</AiBadge>
+        <span class="@Ui.Cx("rounded px-1.5 py-0.5 text-xs font-medium", Rca.Status == "reviewed" ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-700")">@Rca.Status</span>
+        <span class="text-xs text-slate-500">
+            v@(Rca.Version) · generated @Ui.FormatTime(Rca.GeneratedAt, true) · edited @Ui.FormatTime(Rca.UpdatedAt, true)
+        </span>
+    </div>
+
+    <label class="block text-sm font-medium text-slate-700">Impact
+        <textarea @bind="_impact" @bind:event="oninput" rows="3" class="@Field"></textarea>
+    </label>
+
+    <div>
+        <div class="text-sm font-medium text-slate-700">Timeline (UTC)</div>
+        <ol class="mt-1 space-y-1 rounded-md border border-slate-200 p-3 text-sm">
+            @if (Rca.Timeline.Count == 0)
+            {
+                <li class="text-slate-500">No timeline events.</li>
+            }
+            @foreach (var e in Rca.Timeline)
+            {
+                <li class="flex flex-wrap gap-2">
+                    <span class="font-mono text-xs leading-5 text-slate-500">@Ui.FormatTime(e.Timestamp)</span>
+                    <span class="flex-1">@e.Event</span>
+                    @foreach (var reference in e.EvidenceIds)
+                    {
+                        <button type="button" @onclick="() => OnEvidence.InvokeAsync(reference)" class="rounded bg-slate-100 px-1.5 text-xs text-slate-600 hover:bg-indigo-100 hover:text-indigo-800" title="@reference">source</button>
+                    }
+                </li>
+            }
+        </ol>
+    </div>
+
+    <label class="block text-sm font-medium text-slate-700">Root cause
+        <textarea @bind="_rootCause" @bind:event="oninput" rows="3" class="@Field" data-testid="rca-root-cause"></textarea>
+    </label>
+    <div class="grid gap-4 md:grid-cols-3">
+        <label class="block text-sm font-medium text-slate-700">Contributing factors <span class="font-normal text-slate-500">(one per line)</span>
+            <textarea @bind="_factors" @bind:event="oninput" rows="5" class="@Field"></textarea>
+        </label>
+        <label class="block text-sm font-medium text-slate-700">Resolution <span class="font-normal text-slate-500">(one per line)</span>
+            <textarea @bind="_resolution" @bind:event="oninput" rows="5" class="@Field"></textarea>
+        </label>
+        <label class="block text-sm font-medium text-slate-700">Preventive actions <span class="font-normal text-slate-500">(one per line)</span>
+            <textarea @bind="_prevention" @bind:event="oninput" rows="5" class="@Field"></textarea>
+        </label>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+        <Btn Variant="primary" OnClick="() => Save(null)" Disabled="@(!Dirty)">Save changes</Btn>
+        @if (Rca.Status != "reviewed")
+        {
+            <Btn OnClick="@(() => Save("reviewed"))">Save &amp; mark reviewed</Btn>
+        }
+        <Btn OnClick="Copy" Disabled="@Dirty">@(_copied ? "Copied" : "Copy Markdown")</Btn>
+        <a href="/api/rca-drafts/@Rca.Id/export.md" download
+           class="@Ui.Cx("rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50", Dirty ? "pointer-events-none opacity-50" : null)">
+            Download .md
+        </a>
+        @if (Dirty)
+        {
+            <span class="text-xs text-amber-700">Unsaved changes — save before exporting.</span>
+        }
+        @if (_saved && !Dirty)
+        {
+            <span class="text-xs text-emerald-700">Saved.</span>
+        }
+    </div>
+    @if (Rca.ValidationIssues.Count > 0)
+    {
+        <div class="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900" data-testid="rca-validation">
+            <div class="font-medium">Check before publishing</div>
+            <ul class="mt-1 list-disc space-y-0.5 pl-5">
+                @foreach (var i in Rca.ValidationIssues)
+                {
+                    <li>@i</li>
+                }
+            </ul>
+        </div>
+    }
+    @if (_error is not null)
+    {
+        <ErrorBox Message="@_error" />
+    }
+</div>
+
+@code {
+    private const string Field = "mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm";
+
+    [Parameter, EditorRequired] public RcaDraft Rca { get; set; } = new();
+    [Parameter] public EventCallback<string> OnEvidence { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private string _impact = "";
+    private string _rootCause = "";
+    private string _factors = "";
+    private string _resolution = "";
+    private string _prevention = "";
+    private string? _loadedId;
+    private bool _saved;
+    private bool _copied;
+    private string? _error;
+
+    private static string Joined(List<string> xs) => string.Join("\n", xs);
+    private static List<string> Lines(string s) => s.ReplaceLineEndings("\n").Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0).ToList();
+    private static string Text(string s) => s.ReplaceLineEndings("\n");
+
+    private bool Dirty =>
+        Text(_impact) != Rca.Impact || Text(_rootCause) != Rca.RootCause || Text(_factors) != Joined(Rca.ContributingFactors)
+        || Text(_resolution) != Joined(Rca.ResolutionSteps) || Text(_prevention) != Joined(Rca.PreventionActions);
+
+    protected override void OnParametersSet()
+    {
+        // Edits belong to one draft: a refresh of the same draft must not discard what's being typed.
+        if (_loadedId == Rca.Id) return;
+        _loadedId = Rca.Id;
+        _impact = Rca.Impact;
+        _rootCause = Rca.RootCause;
+        _factors = Joined(Rca.ContributingFactors);
+        _resolution = Joined(Rca.ResolutionSteps);
+        _prevention = Joined(Rca.PreventionActions);
+    }
+
+    private async Task Save(string? status)
+    {
+        _error = null;
+        _saved = false;
+        try
+        {
+            Service.PatchRca(Rca.Id, new PatchRcaBody
+            {
+                Impact = Text(_impact),
+                RootCause = Text(_rootCause),
+                ContributingFactors = Lines(_factors),
+                ResolutionSteps = Lines(_resolution),
+                PreventionActions = Lines(_prevention),
+                Status = status,
+            });
+            _saved = true;
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception err)
+        {
+            _error = Ui.Message(err);
+        }
+    }
+
+    private async Task Copy()
+    {
+        _error = null;
+        try
+        {
+            await JS.InvokeVoidAsync("resolveai.copy", Service.ExportRca(Rca.Id).Markdown);
+            _copied = true;
+            StateHasChanged();
+            await Task.Delay(2000);
+            _copied = false;
+        }
+        catch (JSException)
+        {
+            _error = "The browser would not allow copying to the clipboard.";
+        }
+    }
+}

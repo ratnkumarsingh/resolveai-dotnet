@@ -1,0 +1,17 @@
+@* The source label of a cited record; system checks get their system's colour and icon. *@
+@if (Kind == "mcp" && SystemStyle.OfLabel(Label) is { } system)
+{
+    <span class="@Ui.Cx("inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium", SystemStyle.Of(system).Chip)" data-testid="system-citation">
+        <SystemIcon System="@system" Class="h-3 w-3" />
+        @Label[(Label.IndexOf(':') + 1)..].Trim()
+    </span>
+}
+else
+{
+    <span class="@Ui.Cx("shrink-0 rounded px-1.5 py-0.5 text-xs font-medium", Ui.EvidenceKind(Kind))">@Label</span>
+}
+
+@code {
+    [Parameter, EditorRequired] public string Kind { get; set; } = "";
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+}

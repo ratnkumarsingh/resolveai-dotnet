@@ -1,0 +1,39 @@
+@if (Evidence.Logs.Count == 0)
+{
+    <Empty Title="No logs in the incident window" />
+}
+else
+{
+    <div class="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+        <p class="border-b border-slate-100 px-4 py-2 text-xs text-slate-500">
+            Raw sample logs from the demo dataset for @Evidence.Incident.ServiceName and linked services, 30 minutes before start to 1 hour after detection. Secrets are redacted before anything is sent to the model; stored logs are never modified.
+        </p>
+        <table class="w-full text-left text-sm">
+            <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                <tr><th class="px-3 py-2">Time</th><th class="px-3 py-2">Level</th><th class="px-3 py-2">Service</th><th class="px-3 py-2">Message</th></tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100 font-mono text-xs">
+                @foreach (var l in Evidence.Logs)
+                {
+                    <tr @key="l.Id" id="@Ui.RowId(l.Ref)" class="@(Focus == l.Ref ? "flash" : null)">
+                        <td class="whitespace-nowrap px-3 py-1.5 text-slate-500">@Ui.FormatTime(l.Timestamp)</td>
+                        <td class="px-3 py-1.5"><span class="@Ui.Cx("rounded px-1", Ui.LogLevel(l.Level))">@l.Level</span></td>
+                        <td class="whitespace-nowrap px-3 py-1.5 text-slate-600">@l.ServiceName</td>
+                        <td class="px-3 py-1.5 break-all">
+                            @l.Message
+                            @if (!string.IsNullOrEmpty(l.ErrorSignature))
+                            {
+                                <span class="ml-2 rounded bg-slate-100 px-1 text-slate-500">@l.ErrorSignature</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public IncidentEvidence Evidence { get; set; } = new();
+    [Parameter] public string? Focus { get; set; }
+}

@@ -1,0 +1,21 @@
+<button type="@Type" disabled="@Disabled" @onclick="OnClick" @attributes="Attributes"
+        class="@Ui.Cx("inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50", VariantClass, Class)">
+    @ChildContent
+</button>
+
+@code {
+    [Parameter] public string Variant { get; set; } = "secondary";
+    [Parameter] public string Type { get; set; } = "button";
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public EventCallback OnClick { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public IDictionary<string, object>? Attributes { get; set; }
+
+    private string VariantClass => Variant switch
+    {
+        "primary" => "bg-indigo-600 text-white hover:bg-indigo-700",
+        "ghost" => "text-slate-600 hover:bg-slate-100",
+        _ => "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
+    };
+}

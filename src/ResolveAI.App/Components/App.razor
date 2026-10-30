@@ -5,17 +5,29 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <base href="/" />
-    <ResourcePreloader />
+    <title>ResolveAI</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%234f46e5'/><path d='M9 17l5 5 9-11' stroke='white' stroke-width='3.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>" />
     <link rel="stylesheet" href="@Assets["app.css"]" />
     <link rel="stylesheet" href="@Assets["ResolveAI.App.styles.css"]" />
     <ImportMap />
-    <HeadOutlet @rendermode="InteractiveServer" />
 </head>
 
 <body>
-    <Routes @rendermode="InteractiveServer" />
+    <Routes @rendermode="RenderMode" IsLocal="IsLocal" />
     <ReconnectModal />
     <script src="@Assets["_framework/blazor.web.js"]"></script>
+    <script src="@Assets["app.js"]"></script>
 </body>
 
 </html>
+
+@code {
+    // No prerendering: pages load once, when the circuit is up and browser storage is reachable.
+    private static readonly IComponentRenderMode RenderMode = new InteractiveServerRenderMode(prerender: false);
+
+    [CascadingParameter] private HttpContext? Http { get; set; }
+
+    /// <summary>The address the page was requested from, taken here because a running circuit has no request to ask.</summary>
+    private bool IsLocal => Http?.Connection.RemoteIpAddress is { } ip
+        && (System.Net.IPAddress.IsLoopback(ip) || (ip.IsIPv4MappedToIPv6 && System.Net.IPAddress.IsLoopback(ip.MapToIPv4())));
+}

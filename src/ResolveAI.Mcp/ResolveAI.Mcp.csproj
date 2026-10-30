@@ -5,8 +5,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The exe runs from the app's output folder, where these libraries come from the shared framework rather than being copied. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="7.1.1" />
-    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.14" />
     <PackageReference Include="ModelContextProtocol" Version="2.3.0" />
     <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.14" />
   </ItemGroup>

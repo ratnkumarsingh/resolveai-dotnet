@@ -14,3 +14,4 @@ playwright-report/
 # .NET build output
 bin/
 obj/
+tools/css/.cache/

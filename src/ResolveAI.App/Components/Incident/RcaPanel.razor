@@ -1,0 +1,80 @@
+@inject AppService Service
+@inject AccessCodeStore Codes
+
+<div class="space-y-4">
+    <div class="flex flex-wrap items-center gap-2">
+        <Btn Variant="primary" OnClick="Create" Disabled="@(!CanGenerate || _creating)" data-testid="generate-rca">
+            @if (_creating)
+            {
+                <Spinner Class="h-3.5 w-3.5" />
+            }
+            @(Drafts.Count > 0 ? "Generate new version" : "Generate RCA draft")
+        </Btn>
+        @if (!CanGenerate)
+        {
+            <span class="text-sm text-slate-500">Complete an investigation first; the draft is built from its evidence and your feedback.</span>
+        }
+        @if (Drafts.Count > 1)
+        {
+            <select value="@Current?.Id" @onchange="e => _selected = e.Value?.ToString()" class="ml-auto rounded-md border border-slate-300 px-2 py-1.5 text-sm" aria-label="RCA version">
+                @foreach (var d in Drafts)
+                {
+                    <option value="@d.Id">Version @d.Version (@d.Status)</option>
+                }
+            </select>
+        }
+    </div>
+    @if (_creating)
+    {
+        <p class="text-sm text-slate-500">Drafting the RCA from the investigation…</p>
+    }
+    @if (_error is not null)
+    {
+        <ErrorBox Message="@_error" OnRetry="Create" />
+    }
+    @if (Current is not null)
+    {
+        <RcaEditor @key="Current.Id" Rca="Current" OnEvidence="OnEvidence" OnChanged="OnChanged" />
+    }
+    else if (!_creating)
+    {
+        <Empty Title="No RCA draft yet">Generate a draft, edit it, then copy or download it for the postmortem or ticket.</Empty>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string IncidentKey { get; set; } = "";
+    [Parameter] public List<RcaDraft> Drafts { get; set; } = [];
+    [Parameter] public Investigation? Inv { get; set; }
+    [Parameter] public EventCallback<string> OnEvidence { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+    [CascadingParameter(Name = "IsLocal")] private bool IsLocal { get; set; }
+
+    private string? _selected;
+    private bool _creating;
+    private string? _error;
+
+    private bool CanGenerate => Inv?.Status == "completed";
+    private RcaDraft? Current => Drafts.Find(d => d.Id == _selected) ?? Drafts.FirstOrDefault();
+
+    private async Task Create()
+    {
+        if (Inv is null) return;
+        _error = null;
+        _creating = true;
+        try
+        {
+            var rca = await Service.CreateRca(IncidentKey, Inv.Id, new Caller(Codes.Current, IsLocal));
+            _selected = rca.Id;
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception err)
+        {
+            _error = Ui.Message(err);
+        }
+        finally
+        {
+            _creating = false;
+        }
+    }
+}

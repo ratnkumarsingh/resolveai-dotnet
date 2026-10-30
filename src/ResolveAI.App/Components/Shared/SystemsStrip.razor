@@ -1,0 +1,43 @@
+@* "Systems checked" strip on an incident: a pill per system with how many checks it answered. While a run is going, systems that haven't answered yet pulse. *@
+@if (Statuses.Count > 0)
+{
+    <div class="flex flex-wrap items-center gap-2" data-testid="systems-strip">
+        <span class="text-xs font-semibold uppercase tracking-wide text-slate-500">Systems checked</span>
+        @foreach (var system in SystemStyle.Order)
+        {
+            var style = SystemStyle.Of(system);
+            var status = Statuses.FirstOrDefault(s => s.System == system);
+            var mine = Calls.Where(c => c.System == system).ToList();
+            var failed = mine.Count(c => !c.Ok);
+            var off = status is null || status.Status != "connected";
+            var waiting = Running && !off && mine.Count == 0;
+            <span title="@(off ? status?.Detail ?? "Not configured" : $"{mine.Count} check(s){(failed > 0 ? $", {failed} failed" : "")}")"
+                  class="@Ui.Cx("inline-flex items-center gap-1.5 rounded-full py-1 pl-1 pr-2.5 text-xs font-medium ring-1",
+                             off ? "bg-slate-50 text-slate-500 ring-slate-200" : Ui.Cx(style.Soft, style.Text, style.Ring),
+                             waiting ? "motion-safe:animate-pulse" : null)">
+                @if (off)
+                {
+                    <span class="grid h-5 w-5 place-items-center rounded-full bg-slate-200 text-slate-500"><SystemIcon System="@system" Class="h-3 w-3" /></span>
+                }
+                else
+                {
+                    <span class="@Ui.Cx("grid h-5 w-5 place-items-center rounded-full text-white", style.Tile)"><SystemIcon System="@system" Class="h-3 w-3" /></span>
+                }
+                @style.Label
+                <span class="@Ui.Cx("rounded-full px-1.5 text-[11px] font-semibold", off ? "bg-slate-200 text-slate-600" : "bg-white/80")">
+                    @(off ? "off" : waiting ? "…" : mine.Count.ToString())
+                </span>
+                @if (failed > 0)
+                {
+                    <span class="rounded-full bg-red-100 px-1.5 text-[11px] font-semibold text-red-700">@failed failed</span>
+                }
+            </span>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public List<ToolCallRecord> Calls { get; set; } = [];
+    [Parameter] public List<SystemStatus> Statuses { get; set; } = [];
+    [Parameter] public bool Running { get; set; }
+}

@@ -41,7 +41,7 @@ public sealed class AppSettings
             DemoResetAnyIp = env("DEMO_RESET_ANY_IP") == "true",
             DbPath = dbPath == ":memory:" ? ":memory:" : Path.GetFullPath(dbPath ?? "data/resolveai.db", McpConfig.RepoRoot()),
             Host = Trimmed("HOST") ?? "127.0.0.1",
-            Port = int.TryParse(env("API_PORT"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var port) && port > 0 ? port : 8787,
+            Port = int.TryParse(env("API_PORT"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var port) && port >= 0 ? port : 8787,
             McpEnabled = (env("MCP_ENABLED") ?? "true") == "true",
             MaxFollowUps = int.TryParse(Trimmed("MCP_MAX_FOLLOWUP_CALLS"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var followUps) ? Math.Clamp(followUps, 0, 20) : 8,
         };

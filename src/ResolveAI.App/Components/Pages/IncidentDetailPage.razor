@@ -1,0 +1,309 @@
+@page "/incidents/{Id}"
+@implements IDisposable
+@inject AppService Service
+@inject AccessCodeStore Codes
+@inject IJSRuntime JS
+
+<PageTitle>ResolveAI</PageTitle>
+
+@if (_loadError is not null)
+{
+    <div class="space-y-3">
+        <a href="/" class="text-sm text-indigo-600">← Incidents</a>
+        <ErrorBox Message="@_loadError" OnRetry="LoadAll" />
+    </div>
+}
+else if (_detail is not null)
+{
+    var incident = _detail.Incident;
+    var runs = _detail.Investigations;
+    <div class="space-y-5">
+        <a href="/" class="text-sm text-indigo-600 hover:underline">← Incident queue</a>
+
+        <header class="rounded-lg border border-slate-200 bg-white p-5">
+            <div class="flex flex-wrap items-start gap-4">
+                <div class="min-w-0 flex-1">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <span class="font-mono text-sm text-slate-500">@incident.Key</span>
+                        <SeverityChip Severity="@incident.Severity" />
+                        <StatusChip Status="@incident.Status" />
+                        <span class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs text-slate-600">@incident.ServiceName</span>
+                        <span class="text-xs text-slate-500">@incident.Environment</span>
+                    </div>
+                    <h1 class="mt-1.5 text-2xl font-semibold">@incident.Title</h1>
+                    <p class="mt-1 text-sm text-slate-600">@incident.Description</p>
+                    <div class="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-900"><strong>Impact:</strong> @incident.ImpactSummary</div>
+                    <div class="mt-2 text-xs text-slate-500">
+                        Started @Ui.FormatTime(incident.StartedAt, true) · detected @Ui.FormatTime(incident.DetectedAt, true)
+                        @if (!string.IsNullOrEmpty(incident.ResolvedAt))
+                        {
+                            <text> · resolved @Ui.FormatTime(incident.ResolvedAt, true)</text>
+                        }
+                    </div>
+                    <div class="mt-3">
+                        <SystemsStrip Calls="@(_inv?.ToolCalls ?? [])" Statuses="@_systems.Systems" Running="@Running" />
+                    </div>
+                </div>
+                <form class="w-full space-y-2 sm:w-80" @onsubmit="Start" @onsubmit:preventDefault="true">
+                    <input @bind="_question" @bind:event="oninput" maxlength="500" placeholder="Optional question, e.g. is the DB the bottleneck?" aria-label="Investigation question"
+                           class="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm" />
+                    @if (LiveAllowed)
+                    {
+                        <label class="flex items-start gap-2 text-xs text-slate-600">
+                            <input type="checkbox" @bind="_live" class="mt-0.5" data-testid="use-live" />
+                            <span>
+                                Use live Claude (@_config.LiveModel) · @Math.Max(0, _config.LiveDailyLimit - _config.LiveRunsToday) of @_config.LiveDailyLimit left today
+                                @if (_live && Codes.Current.Length == 0 && _config.LlmMode != "live")
+                                {
+                                    <span class="block text-amber-700">Needs the access code — <a href="/settings" class="underline">enter it in Settings</a>.</span>
+                                }
+                            </span>
+                        </label>
+                    }
+                    <Btn Type="submit" Variant="primary" Class="w-full" Disabled="@Running" data-testid="run-investigation">
+                        @if (Running)
+                        {
+                            <Spinner Class="h-3.5 w-3.5" />
+                        }
+                        @(Running ? "Investigation running…" : _inv is not null ? "Run investigation again" : "Run investigation")
+                    </Btn>
+                    @if (_startError is not null)
+                    {
+                        <ErrorBox Message="@_startError" />
+                    }
+                    @if (runs.Count > 0)
+                    {
+                        <div class="text-xs text-slate-500" data-testid="prior-runs">
+                            @runs.Count previous run@(runs.Count > 1 ? "s" : "") — a new run is added; earlier results are kept.
+                            @if (runs.Count > 1)
+                            {
+                                <select value="@InvestigationId" @onchange="SelectRun" class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700" aria-label="Investigation run">
+                                    @for (var i = 0; i < runs.Count; i++)
+                                    {
+                                        var r = runs[i];
+                                        var top = r.TopHypothesis is { } t ? $" · {t[..Math.Min(40, t.Length)]}" : "";
+                                        <option value="@r.Id">@(i == 0 ? "Latest" : $"Run {runs.Count - i}") · @Ui.FormatTime(r.StartedAt, true) · @r.LlmMode · @r.Status@top</option>
+                                    }
+                                </select>
+                            }
+                        </div>
+                    }
+                </form>
+            </div>
+        </header>
+
+        <nav class="flex gap-1 overflow-x-auto border-b border-slate-200" role="tablist">
+            @foreach (var (key, label) in Tabs)
+            {
+                <button type="button" role="tab" aria-selected="@Ui.Aria(_tab == key)" @onclick="() => SetTab(key)"
+                        class="@Ui.Cx("-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm", _tab == key ? "border-indigo-600 font-medium text-indigo-700" : "border-transparent text-slate-600 hover:text-slate-900")">
+                    @label
+                    @if (key == "findings" && Running)
+                    {
+                        <Spinner Class="ml-1.5 h-3 w-3 align-[-2px]" />
+                    }
+                    @if (key == "logs" && _evidence is not null)
+                    {
+                        <span class="ml-1 text-xs text-slate-400">@_evidence.Logs.Count</span>
+                    }
+                    @if (key == "systems" && _inv is { ToolCalls.Count: > 0 })
+                    {
+                        <span class="ml-1 rounded-full bg-gradient-to-r from-sky-500 to-violet-500 px-1.5 text-[11px] font-semibold text-white">@_inv.ToolCalls.Count</span>
+                    }
+                    @if (key == "rca" && _detail.RcaDrafts.Count > 0)
+                    {
+                        <span class="ml-1 text-xs text-slate-400">v@(_detail.RcaDrafts[0].Version)</span>
+                    }
+                </button>
+            }
+        </nav>
+
+        <div @key="_tab">
+            @switch (_tab)
+            {
+                case "overview" when _evidence is not null:
+                    <OverviewTab Evidence="_evidence" Focus="@_focus" />
+                    break;
+                case "logs" when _evidence is not null:
+                    <LogsTab Evidence="_evidence" Focus="@_focus" />
+                    break;
+                case "deployments" when _evidence is not null:
+                    <DeploymentsTab Evidence="_evidence" Focus="@_focus" />
+                    break;
+                case "findings":
+                    <Findings Inv="_inv" Evidence="_evidence" OnEvidence="ShowEvidence" OnRun="Start" OnChanged="ReloadInvestigation" />
+                    break;
+                case "systems":
+                    <ToolResultsTab Inv="_inv" Focus="@_focus" />
+                    break;
+                case "similar":
+                    <SimilarIncidents Inv="_inv" Focus="@_focus" />
+                    break;
+                case "rca":
+                    <RcaPanel IncidentKey="@Id" Drafts="_detail.RcaDrafts" Inv="_inv" OnEvidence="ShowEvidence" OnChanged="ReloadDetail" />
+                    break;
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private static readonly (string Key, string Label)[] Tabs =
+    [
+        ("overview", "Signals & timeline"), ("logs", "Logs"), ("deployments", "Deployments"), ("findings", "AI findings"),
+        ("systems", "System checks"), ("similar", "Similar incidents"), ("rca", "RCA"),
+    ];
+
+    [Parameter] public string Id { get; set; } = "";
+    [CascadingParameter(Name = "IsLocal")] private bool IsLocal { get; set; }
+
+    private string _loadedId = "";
+    private string _tab = "overview";
+    private string? _focus;
+    private bool _scrollPending;
+    private string _question = "";
+    private string? _startedId;
+    private bool _live;
+    private AppConfig _config = new();
+    private SystemsResponse _systems = new();
+    private IncidentDetail? _detail;
+    private IncidentEvidence? _evidence;
+    private Investigation? _inv;
+    private string? _loadError;
+    private string? _startError;
+    private Timer? _poll;
+
+    private string? InvestigationId => _startedId ?? _detail?.LatestInvestigationId;
+    private bool Running => _inv?.Status is "queued" or "running";
+    // Shown only when the server can run live on request; a server that is live by default needs no toggle.
+    private bool LiveAllowed => _config.LiveAvailable && _config.LlmMode != "live";
+
+    protected override void OnParametersSet()
+    {
+        if (Id == _loadedId) return;
+        // Reset local state when navigating between incidents.
+        _loadedId = Id;
+        _startedId = null;
+        _tab = "overview";
+        _focus = null;
+        _question = "";
+        _inv = null;
+        StopPolling();
+        LoadAll();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await Codes.Load();
+            StateHasChanged();
+        }
+        // After a jump to a source record, scroll it into view once its tab has rendered.
+        if (_scrollPending && _focus is not null)
+        {
+            _scrollPending = false;
+            await JS.InvokeVoidAsync("resolveai.scrollToId", Ui.RowId(_focus));
+        }
+    }
+
+    private void LoadAll()
+    {
+        try
+        {
+            _config = Service.Config();
+            _systems = Service.Systems();
+            _detail = Service.IncidentDetail(Id);
+            _evidence = Service.Evidence(Id);
+            _loadError = null;
+            ReloadInvestigation();
+        }
+        catch (Exception err)
+        {
+            _detail = null;
+            _loadError = Ui.Message(err);
+        }
+    }
+
+    private void ReloadDetail()
+    {
+        _detail = Service.IncidentDetail(Id);
+        _config = Service.Config();
+    }
+
+    private void ReloadInvestigation()
+    {
+        var id = InvestigationId;
+        _inv = id is null ? null : Service.Investigation(id);
+        if (Running) StartPolling();
+    }
+
+    private void StartPolling() => _poll ??= new Timer(_ => InvokeAsync(Poll), null, TimeSpan.FromMilliseconds(1500), TimeSpan.FromMilliseconds(1500));
+
+    private void StopPolling()
+    {
+        _poll?.Dispose();
+        _poll = null;
+    }
+
+    private void Poll()
+    {
+        if (InvestigationId is not { } id) return;
+        try
+        {
+            _inv = Service.Investigation(id);
+            if (!Running)
+            {
+                // When a run finishes, refresh the incident so the run list shows its final status.
+                StopPolling();
+                ReloadDetail();
+            }
+        }
+        catch (Exception err)
+        {
+            StopPolling();
+            _startError = Ui.Message(err);
+        }
+        StateHasChanged();
+    }
+
+    private void Start()
+    {
+        _startError = null;
+        try
+        {
+            var body = new StartInvestigationBody
+            {
+                Question = string.IsNullOrWhiteSpace(_question) ? null : _question.Trim(),
+                Mode = LiveAllowed && _live ? "live" : null,
+            };
+            var (id, _) = Service.StartInvestigation(Id, body, new Caller(Codes.Current, IsLocal));
+            _startedId = id;
+            _tab = "findings";
+            ReloadDetail();
+            ReloadInvestigation();
+        }
+        catch (Exception err)
+        {
+            _startError = Ui.Message(err);
+        }
+    }
+
+    private void SelectRun(ChangeEventArgs e)
+    {
+        _startedId = e.Value?.ToString();
+        _tab = "findings";
+        ReloadInvestigation();
+    }
+
+    private void SetTab(string tab) => _tab = tab;
+
+    private void ShowEvidence(string reference)
+    {
+        _tab = Ui.TabForEvidence(reference);
+        _focus = reference;
+        _scrollPending = true;
+    }
+
+    public void Dispose() => StopPolling();
+}
