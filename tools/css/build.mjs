@@ -2,13 +2,20 @@
 // the app needs only the .NET SDK; this is only needed after changing CSS classes. Usage:
 //   npm install --prefix tools/css && node tools/css/build.mjs
 import { readFileSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { compile, optimize } from "@tailwindcss/node";
 import { Scanner } from "@tailwindcss/oxide";
 
 const app = resolve(dirname(fileURLToPath(import.meta.url)), "../../src/ResolveAI.App");
-const compiler = await compile(readFileSync(join(app, "Styles/app.css"), "utf8"), { base: join(app, "Styles"), onDependency: () => {} });
+const require = createRequire(import.meta.url);
+const compiler = await compile(readFileSync(join(app, "Styles/app.css"), "utf8"), {
+  base: join(app, "Styles"),
+  onDependency: () => {},
+  // The stylesheet lives outside this tool's folder, so point its import at the packages installed here.
+  customCssResolver: async (id) => (id === "tailwindcss" ? require.resolve("tailwindcss/index.css") : undefined),
+});
 const scanner = new Scanner({ sources: compiler.sources });
 const candidates = scanner.scan();
 const { code } = optimize(compiler.build(candidates), { minify: true });
