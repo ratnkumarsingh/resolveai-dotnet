@@ -59,7 +59,8 @@ public static class Json
                 case JsonTokenType.False: return false;
                 case JsonTokenType.Null: return null;
                 case JsonTokenType.Number:
-                    return reader.TryGetInt64(out var whole) ? whole : reader.GetDouble();
+                    // The cast matters: without it the conditional would widen every whole number to double.
+                    return reader.TryGetInt64(out var whole) ? (object)whole : reader.GetDouble();
                 case JsonTokenType.StartArray:
                     var list = new List<object?>();
                     while (reader.Read() && reader.TokenType != JsonTokenType.EndArray) list.Add(Read(ref reader, typeof(object), options));
