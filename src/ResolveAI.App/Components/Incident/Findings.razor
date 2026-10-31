@@ -13,15 +13,7 @@
 }
 else if (Inv.Status is "queued" or "running")
 {
-    <div class="rounded-lg border border-indigo-200 bg-indigo-50 p-6" role="status" data-testid="investigation-running">
-        <div class="flex items-center gap-3 text-indigo-900">
-            <Spinner Class="h-5 w-5" />
-            <div>
-                <div class="font-medium">Investigation in progress</div>
-                <div class="text-sm text-indigo-800">@(Inv.Stage ?? "Queued")…</div>
-            </div>
-        </div>
-    </div>
+    <InvestigationBoard Inv="Inv" />
 }
 else if (Inv.Status == "failed")
 {
@@ -36,6 +28,17 @@ else if (Inv.Status == "failed")
 else
 {
     <div class="space-y-4" data-testid="investigation-results">
+        @if (Inv.InsufficientEvidence || Inv.Hypotheses.Count == 0)
+        {
+            <div class="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900" data-testid="insufficient-evidence">
+                <strong>Insufficient evidence.</strong> The available records don't support a root-cause hypothesis. Gather more logs, metrics or change history and run the investigation again.
+            </div>
+        }
+        else
+        {
+            <LeadingHypothesis Inv="Inv" H="Inv.Hypotheses[0]" OnEvidence="OnEvidence" OnOpenRca="OnOpenRca" />
+        }
+
         @if (Evidence is not null)
         {
             <ObservedFacts Evidence="Evidence" />
@@ -56,14 +59,7 @@ else
             }
         </section>
 
-        @if (Inv.InsufficientEvidence)
-        {
-            <div class="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900" data-testid="insufficient-evidence">
-                <strong>Insufficient evidence.</strong> The available records don't support a root-cause hypothesis. Gather more logs, metrics or change history and run the investigation again.
-            </div>
-        }
-
-        <div class="space-y-3">
+        <div id="hypothesis-list" class="scroll-mt-4 space-y-3">
             @foreach (var h in Inv.Hypotheses)
             {
                 <HypothesisCard @key="h.Id" H="h" InvestigationId="@Inv.Id" OnEvidence="OnEvidence" OnChanged="OnChanged" />
@@ -100,7 +96,9 @@ else
 
         <TracePanel Trace="Inv.Trace" Calls="Inv.ToolCalls" Live="@(Inv.LlmMode == "live")" />
 
-        <VerifiedCauseForm @key="Inv.Id" Inv="Inv" OnChanged="OnChanged" />
+        <div id="verified-cause" class="scroll-mt-4">
+            <VerifiedCauseForm @key="Inv.Id" Inv="Inv" OnChanged="OnChanged" />
+        </div>
     </div>
 }
 
@@ -109,5 +107,6 @@ else
     [Parameter] public IncidentEvidence? Evidence { get; set; }
     [Parameter] public EventCallback<string> OnEvidence { get; set; }
     [Parameter] public EventCallback OnRun { get; set; }
+    [Parameter] public EventCallback OnOpenRca { get; set; }
     [Parameter] public EventCallback OnChanged { get; set; }
 }

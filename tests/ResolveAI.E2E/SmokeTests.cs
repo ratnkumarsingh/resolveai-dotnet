@@ -100,6 +100,77 @@ public sealed class SmokeTests(AppFixture app)
     }
 
     [Fact]
+    public async Task A_run_shows_its_progress_then_opens_on_the_leading_hypothesis_and_next_actions()
+    {
+        Assert.True((await app.Http.PostAsync("/api/demo/reset", null)).IsSuccessStatusCode);
+        var page = await NewPage();
+        await page.GotoAsync("/incidents/INC-1042");
+        await Expect(page.GetByTestId("incident-description")).ToBeVisibleAsync();
+
+        await page.GetByTestId("run-investigation").ClickAsync();
+        await Expect(page.GetByTestId("investigation-steps")).ToContainTextAsync("Analyse the evidence");
+        await Expect(page.GetByTestId("investigation-results")).ToBeVisibleAsync(new() { Timeout = 20_000 });
+
+        // The headline, its proof and an action are all on the first screen, and it says it isn't confirmed.
+        var hero = page.GetByTestId("leading-hypothesis");
+        await Expect(hero).ToContainTextAsync(new Regex("pool", RegexOptions.IgnoreCase));
+        await Expect(hero).ToContainTextAsync("not confirmed");
+        await Expect(hero).ToContainTextAsync("nothing is executed");
+        await Expect(hero.GetByRole(AriaRole.Button, new() { Name = "Draft RCA" })).ToBeInViewportAsync();
+        await Expect(page.GetByTestId("leading-evidence").First).ToBeInViewportAsync();
+
+        // The header stepped aside; Details brings back the description and the earlier runs.
+        await Expect(page.GetByTestId("incident-description")).ToHaveCountAsync(0);
+        await page.GetByTestId("incident-details-toggle").ClickAsync();
+        await Expect(page.GetByTestId("incident-description")).ToBeVisibleAsync();
+        await Expect(page.GetByTestId("prior-runs")).ToBeVisibleAsync();
+        await page.GetByTestId("incident-details-toggle").ClickAsync();
+
+        // Each action goes where it says.
+        await hero.GetByRole(AriaRole.Button, new() { Name = "Record what you found" }).ClickAsync();
+        await Expect(page.GetByRole(AriaRole.Textbox, new() { Name = "Verified root cause" })).ToBeInViewportAsync();
+        await page.EvaluateAsync("() => window.scrollTo(0, 0)");
+        await page.GetByTestId("leading-evidence").First.ClickAsync();
+        await Expect(page.GetByRole(AriaRole.Tab, new() { Name = "AI findings" })).ToHaveAttributeAsync("aria-selected", "false");
+        await page.GetByRole(AriaRole.Tab, new() { Name = "AI findings" }).ClickAsync();
+        await hero.GetByRole(AriaRole.Button, new() { Name = "Draft RCA" }).ClickAsync();
+        await Expect(page.GetByTestId("generate-rca")).ToBeVisibleAsync();
+
+        // Coming back opens on the findings.
+        await page.ReloadAsync();
+        await Expect(hero).ToBeVisibleAsync();
+
+        // On a phone the headline is on the first screen and the finished page doesn't scroll sideways.
+        var phone = await NewPage(390);
+        await phone.GotoAsync("/incidents/INC-1042");
+        await Expect(phone.GetByTestId("leading-hypothesis").Locator("h2")).ToBeInViewportAsync();
+        Assert.True(await phone.EvaluateAsync<int>("() => document.documentElement.scrollWidth - window.innerWidth") <= 0);
+    }
+
+    [Fact]
+    public async Task The_leading_hypothesis_never_overstates_weak_evidence()
+    {
+        Assert.True((await app.Http.PostAsync("/api/demo/reset", null)).IsSuccessStatusCode);
+        var page = await NewPage();
+        await page.GotoAsync("/incidents/INC-1042");
+        await page.GetByTestId("run-investigation").ClickAsync();
+        var hero = page.GetByTestId("leading-hypothesis");
+        await Expect(hero).ToBeVisibleAsync(new() { Timeout = 20_000 });
+
+        app.Deps.Db.Run("UPDATE hypotheses SET speculative = 1 WHERE rank = 1");
+        await page.ReloadAsync();
+        await Expect(page.GetByTestId("leading-speculative")).ToBeVisibleAsync();
+        await Expect(hero).Not.ToContainTextAsync("high confidence");
+
+        app.Deps.Db.Run("UPDATE investigations SET insufficient_evidence = 1");
+        await page.ReloadAsync();
+        await Expect(page.GetByTestId("insufficient-evidence")).ToBeVisibleAsync();
+        await Expect(hero).ToHaveCountAsync(0);
+
+        Assert.True((await app.Http.PostAsync("/api/demo/reset", null)).IsSuccessStatusCode);
+    }
+
+    [Fact]
     public async Task Filters_and_row_clicks_work_on_the_queue()
     {
         var page = await NewPage();

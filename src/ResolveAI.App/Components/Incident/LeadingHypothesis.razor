@@ -1,0 +1,71 @@
+@inject IJSRuntime JS
+
+@* The first thing a finished run shows: the top hypothesis, what backs it, what to check, and what to do next. It stays labelled as unconfirmed. *@
+<section class="@Ui.Cx("overflow-hidden rounded-xl border bg-gradient-to-br shadow-sm", H.Speculative ? "border-amber-300 from-amber-50 to-white" : "border-violet-200 from-violet-50 via-white to-indigo-50")" data-testid="leading-hypothesis">
+    <div class="p-5">
+        <div class="flex flex-wrap items-center gap-2">
+            <span class="text-xs font-semibold uppercase tracking-wide text-violet-800">Leading hypothesis</span>
+            <AiBadge>@(Inv.LlmMode == "live" ? $"AI-generated ({Inv.ModelName ?? "Claude"}) — not confirmed" : "Recorded analysis — not confirmed")</AiBadge>
+            @if (!H.Speculative)
+            {
+                <ConfidenceChip Confidence="@H.Confidence" />
+            }
+            <span class="ml-auto text-xs text-slate-500">@Inv.EvidenceCount evidence records · @Inv.ToolCalls.Count system checks</span>
+        </div>
+        <h2 class="@Ui.Cx("mt-2 font-semibold text-slate-900", H.Speculative ? "text-lg" : "text-2xl")">@H.Title</h2>
+        @if (H.Speculative)
+        {
+            <p class="mt-2 rounded-md bg-amber-100 px-3 py-2 text-sm text-amber-900" data-testid="leading-speculative">
+                <strong>Speculative:</strong> no supporting records in the evidence packet. Treat this as a starting idea, not a finding.
+            </p>
+        }
+
+        <div class="mt-4 grid gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+            @if (H.Evidence.Count > 0)
+            {
+                <div class="min-w-0">
+                    <h3 class="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">What backs it</h3>
+                    <ul class="space-y-0.5">
+                        @foreach (var e in H.Evidence.Take(3))
+                        {
+                            <li @key="e.Ref">
+                                <button type="button" @onclick="() => OnEvidence.InvokeAsync(e.Ref)" class="group flex w-full items-start gap-2 rounded-md p-1.5 text-left text-sm hover:bg-white"
+                                        title="Show source record" data-testid="leading-evidence">
+                                    <EvidenceChip Kind="@e.Kind" Label="@e.Label" />
+                                    <span class="min-w-0 line-clamp-2 break-words text-slate-700 group-hover:text-indigo-700 group-hover:underline">@(e.Kind == "mcp" ? e.Excerpt.Split('\n')[0] : e.Excerpt)</span>
+                                </button>
+                            </li>
+                        }
+                    </ul>
+                    @if (H.Evidence.Count > 3)
+                    {
+                        <p class="mt-1 pl-1.5 text-xs text-slate-500">and @(H.Evidence.Count - 3) more in the full reasoning</p>
+                    }
+                </div>
+            }
+            @if (H.RecommendedChecks.FirstOrDefault() is { } check)
+            {
+                <div class="min-w-0 rounded-lg border border-slate-200 bg-white p-3" data-testid="leading-check">
+                    <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-500">Check this first</h3>
+                    <p class="mt-1 text-sm font-medium text-slate-900">@check.Step</p>
+                    <p class="mt-1 text-xs text-slate-600"><strong class="font-medium">Expect:</strong> @check.ExpectedSignal</p>
+                    <p class="mt-2 text-xs text-slate-500">For an engineer to perform — nothing is executed.</p>
+                </div>
+            }
+        </div>
+    </div>
+    <div class="flex flex-wrap items-center gap-2 border-t border-slate-200/70 bg-white/60 px-5 py-3">
+        <Btn Variant="primary" OnClick="@(() => ScrollTo("verified-cause"))">Record what you found</Btn>
+        <Btn OnClick="OnOpenRca">Draft RCA</Btn>
+        <Btn Variant="ghost" OnClick="@(() => ScrollTo("hypothesis-list"))">See full reasoning</Btn>
+    </div>
+</section>
+
+@code {
+    [Parameter, EditorRequired] public Investigation Inv { get; set; } = new();
+    [Parameter, EditorRequired] public Hypothesis H { get; set; } = new();
+    [Parameter] public EventCallback<string> OnEvidence { get; set; }
+    [Parameter] public EventCallback OnOpenRca { get; set; }
+
+    private async Task ScrollTo(string id) => await JS.InvokeVoidAsync("resolveai.scrollToId", id, "start");
+}

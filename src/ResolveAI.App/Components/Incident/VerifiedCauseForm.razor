@@ -11,7 +11,7 @@
             <textarea @bind="_comment" @bind:event="oninput" rows="2" placeholder="What you checked and what you saw" class="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5"></textarea>
         </label>
         <div class="flex flex-wrap items-center gap-2">
-            <select @bind="_hypothesisId" class="rounded-md border border-slate-300 px-2 py-1.5 text-sm" aria-label="Related hypothesis">
+            <select @bind="_hypothesisId" class="w-full min-w-0 rounded-md border border-slate-300 px-2 py-1.5 text-sm sm:w-auto sm:max-w-full" aria-label="Related hypothesis">
                 <option value="">Not tied to a hypothesis</option>
                 @foreach (var h in Inv.Hypotheses)
                 {

@@ -20,7 +20,7 @@ else if (_detail is not null)
     <div class="space-y-5">
         <a href="/" class="text-sm text-indigo-600 hover:underline">← Incident queue</a>
 
-        <header class="rounded-lg border border-slate-200 bg-white p-5">
+        <header class="@Ui.Cx("rounded-lg border border-slate-200 bg-white", Collapsed ? "px-5 py-3" : "p-5")">
             <div class="flex flex-wrap items-start gap-4">
                 <div class="min-w-0 flex-1">
                     <div class="flex flex-wrap items-center gap-2">
@@ -30,35 +30,41 @@ else if (_detail is not null)
                         <span class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs text-slate-600">@incident.ServiceName</span>
                         <span class="text-xs text-slate-500">@incident.Environment</span>
                     </div>
-                    <h1 class="mt-1.5 text-2xl font-semibold">@incident.Title</h1>
-                    <p class="mt-1 text-sm text-slate-600">@incident.Description</p>
-                    <div class="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-900"><strong>Impact:</strong> @incident.ImpactSummary</div>
-                    <div class="mt-2 text-xs text-slate-500">
-                        Started @Ui.FormatTime(incident.StartedAt, true) · detected @Ui.FormatTime(incident.DetectedAt, true)
-                        @if (!string.IsNullOrEmpty(incident.ResolvedAt))
-                        {
-                            <text> · resolved @Ui.FormatTime(incident.ResolvedAt, true)</text>
-                        }
-                    </div>
-                    <div class="mt-3">
+                    <h1 class="@Ui.Cx("mt-1.5 font-semibold", Collapsed ? "text-lg" : "text-2xl")">@incident.Title</h1>
+                    @if (!Collapsed)
+                    {
+                        <p class="mt-1 text-sm text-slate-600" data-testid="incident-description">@incident.Description</p>
+                        <div class="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-900"><strong>Impact:</strong> @incident.ImpactSummary</div>
+                        <div class="mt-2 text-xs text-slate-500">
+                            Started @Ui.FormatTime(incident.StartedAt, true) · detected @Ui.FormatTime(incident.DetectedAt, true)
+                            @if (!string.IsNullOrEmpty(incident.ResolvedAt))
+                            {
+                                <text> · resolved @Ui.FormatTime(incident.ResolvedAt, true)</text>
+                            }
+                        </div>
+                    }
+                    <div class="@Ui.Cx(Collapsed ? "mt-2 hidden sm:block" : "mt-3")">
                         <SystemsStrip Calls="@(_inv?.ToolCalls ?? [])" Statuses="@_systems.Systems" Running="@Running" />
                     </div>
                 </div>
-                <form class="w-full space-y-2 sm:w-80" @onsubmit="Start" @onsubmit:preventDefault="true">
-                    <input @bind="_question" @bind:event="oninput" maxlength="500" placeholder="Optional question, e.g. is the DB the bottleneck?" aria-label="Investigation question"
-                           class="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm" />
-                    @if (LiveAllowed)
+                <form class="@Ui.Cx("w-full space-y-2", Collapsed ? "sm:w-56" : "sm:w-80")" @onsubmit="Start" @onsubmit:preventDefault="true">
+                    @if (!Collapsed)
                     {
-                        <label class="flex items-start gap-2 text-xs text-slate-600">
-                            <input type="checkbox" @bind="_live" class="mt-0.5" data-testid="use-live" />
-                            <span>
-                                Use live Claude (@_config.LiveModel) · @Math.Max(0, _config.LiveDailyLimit - _config.LiveRunsToday) of @_config.LiveDailyLimit left today
-                                @if (_live && Codes.Current.Length == 0 && _config.LlmMode != "live")
-                                {
-                                    <span class="block text-amber-700">Needs the access code — <a href="/settings" class="underline">enter it in Settings</a>.</span>
-                                }
-                            </span>
-                        </label>
+                        <input @bind="_question" @bind:event="oninput" maxlength="500" placeholder="Optional question, e.g. is the DB the bottleneck?" aria-label="Investigation question"
+                               class="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm" />
+                        @if (LiveAllowed)
+                        {
+                            <label class="flex items-start gap-2 text-xs text-slate-600">
+                                <input type="checkbox" @bind="_live" class="mt-0.5" data-testid="use-live" />
+                                <span>
+                                    Use live Claude (@_config.LiveModel) · @Math.Max(0, _config.LiveDailyLimit - _config.LiveRunsToday) of @_config.LiveDailyLimit left today
+                                    @if (_live && Codes.Current.Length == 0 && _config.LlmMode != "live")
+                                    {
+                                        <span class="block text-amber-700">Needs the access code — <a href="/settings" class="underline">enter it in Settings</a>.</span>
+                                    }
+                                </span>
+                            </label>
+                        }
                     }
                     <Btn Type="submit" Variant="primary" Class="w-full" Disabled="@Running" data-testid="run-investigation">
                         @if (Running)
@@ -71,7 +77,14 @@ else if (_detail is not null)
                     {
                         <ErrorBox Message="@_startError" />
                     }
-                    @if (runs.Count > 0)
+                    @if (HasRun)
+                    {
+                        <button type="button" @onclick="() => _detailsOpen = !_detailsOpen" aria-expanded="@Ui.Aria(_detailsOpen)" data-testid="incident-details-toggle"
+                                class="w-full text-center text-xs font-medium text-indigo-700 hover:underline">
+                            @(_detailsOpen ? "Hide details" : "Details, question and earlier runs")
+                        </button>
+                    }
+                    @if (runs.Count > 0 && !Collapsed)
                     {
                         <div class="text-xs text-slate-500" data-testid="prior-runs">
                             @runs.Count previous run@(runs.Count > 1 ? "s" : "") — a new run is added; earlier results are kept.
@@ -131,7 +144,7 @@ else if (_detail is not null)
                     <DeploymentsTab Evidence="_evidence" Focus="@_focus" />
                     break;
                 case "findings":
-                    <Findings Inv="_inv" Evidence="_evidence" OnEvidence="ShowEvidence" OnRun="Start" OnChanged="ReloadInvestigation" />
+                    <Findings Inv="_inv" Evidence="_evidence" OnEvidence="ShowEvidence" OnRun="Start" OnOpenRca="@(() => SetTab("rca"))" OnChanged="ReloadInvestigation" />
                     break;
                 case "systems":
                     <ToolResultsTab Inv="_inv" Focus="@_focus" />
@@ -164,6 +177,7 @@ else if (_detail is not null)
     private string _question = "";
     private string? _startedId;
     private bool _live;
+    private bool _detailsOpen;
     private AppConfig _config = new();
     private SystemsResponse _systems = new();
     private IncidentDetail? _detail;
@@ -175,6 +189,9 @@ else if (_detail is not null)
 
     private string? InvestigationId => _startedId ?? _detail?.LatestInvestigationId;
     private bool Running => _inv?.Status is "queued" or "running";
+    // Once a run is going or finished, the header makes room for it. A failed run keeps the full header.
+    private bool HasRun => Running || _inv?.Status == "completed";
+    private bool Collapsed => HasRun && !_detailsOpen;
     // Shown only when the server can run live on request; a server that is live by default needs no toggle.
     private bool LiveAllowed => _config.LiveAvailable && _config.LlmMode != "live";
 
@@ -188,8 +205,11 @@ else if (_detail is not null)
         _focus = null;
         _question = "";
         _inv = null;
+        _detailsOpen = false;
         StopPolling();
         LoadAll();
+        // Coming back to an investigated incident opens on its findings.
+        if (HasRun) _tab = "findings";
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -238,7 +258,7 @@ else if (_detail is not null)
         if (Running) StartPolling();
     }
 
-    private void StartPolling() => _poll ??= new Timer(_ => InvokeAsync(Poll), null, TimeSpan.FromMilliseconds(1500), TimeSpan.FromMilliseconds(1500));
+    private void StartPolling() => _poll ??= new Timer(_ => InvokeAsync(Poll), null, TimeSpan.FromMilliseconds(500), TimeSpan.FromMilliseconds(500));
 
     private void StopPolling()
     {
@@ -280,6 +300,10 @@ else if (_detail is not null)
             var (id, _) = Service.StartInvestigation(Id, body, new Caller(Codes.Current, IsLocal));
             _startedId = id;
             _tab = "findings";
+            // The form collapses, so nothing hidden carries over: each question and each paid live run is chosen again.
+            _detailsOpen = false;
+            _question = "";
+            _live = false;
             ReloadDetail();
             ReloadInvestigation();
         }

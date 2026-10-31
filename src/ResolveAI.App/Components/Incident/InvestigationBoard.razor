@@ -1,0 +1,80 @@
+@* What a running investigation is doing, from the stage the pipeline reports and the checks that have answered so far. Nothing here is simulated. *@
+<div class="overflow-hidden rounded-xl border border-indigo-200 bg-white shadow-sm" data-testid="investigation-running">
+    <div class="flex flex-wrap items-center gap-3 bg-gradient-to-r from-indigo-600 to-violet-600 px-5 py-4 text-white">
+        <Spinner Class="h-5 w-5" />
+        <div class="min-w-0 flex-1" role="status">
+            <div class="font-semibold">Investigation in progress</div>
+            <div class="text-sm text-indigo-100">@(Inv.Stage ?? "Queued")…</div>
+        </div>
+        <span class="rounded-full bg-white/15 px-2.5 py-1 text-xs font-medium">
+            @(Inv.LlmMode == "live" ? "Live: Claude is analysing" : "Recorded mode: no model is called")
+        </span>
+    </div>
+    <div class="grid gap-6 p-5 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+        <ol class="space-y-3" data-testid="investigation-steps">
+            @for (var i = 0; i < Steps.Length; i++)
+            {
+                var (name, note, _) = Steps[i];
+                var done = i < Active;
+                var active = i == Active;
+                <li class="flex items-start gap-3" aria-current="@(active ? "step" : null)">
+                    <span class="@Ui.Cx("mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full", done ? "bg-emerald-500 text-white" : active ? "bg-indigo-100 text-indigo-700" : "bg-slate-100")">
+                        @if (done)
+                        {
+                            <svg viewBox="0 0 16 16" class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M3 8.5l3.5 3.5L13 5" /></svg>
+                        }
+                        else if (active)
+                        {
+                            <Spinner Class="h-3 w-3" />
+                        }
+                    </span>
+                    <div class="min-w-0">
+                        <div class="@Ui.Cx("text-sm", active ? "font-semibold text-slate-900" : done ? "text-slate-700" : "text-slate-400")">@name</div>
+                        <div class="@Ui.Cx("text-xs", active || done ? "text-slate-500" : "text-slate-400")">@note</div>
+                    </div>
+                </li>
+            }
+        </ol>
+        <div class="min-w-0">
+            <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                System checks so far <span class="font-normal normal-case">(@Inv.ToolCalls.Count, read-only)</span>
+            </h3>
+            @if (Inv.ToolCalls.Count == 0)
+            {
+                <p class="rounded-md bg-slate-50 p-3 text-sm text-slate-500">Results appear here as each system answers.</p>
+            }
+            else
+            {
+                <ul class="space-y-1.5" data-testid="investigation-feed">
+                    @foreach (var call in Inv.ToolCalls.OrderByDescending(c => c.Seq).Take(6))
+                    {
+                        var style = SystemStyle.Of(call.System);
+                        <li @key="call.Ref" class="flex items-start gap-2 rounded-md bg-slate-50 p-2 text-sm">
+                            <span class="@Ui.Cx("inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 font-mono text-xs font-medium", style.Chip)">
+                                <SystemIcon System="@call.System" Class="h-3 w-3" />
+                                @call.Tool
+                            </span>
+                            <span class="@Ui.Cx("min-w-0 line-clamp-2 break-words", call.Ok ? "text-slate-700" : "text-red-700")">@call.Summary</span>
+                        </li>
+                    }
+                </ul>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    // Match matches the stage text set in Investigations.Run. An unmatched stage lights no step, and its text still shows above.
+    private static readonly (string Name, string Note, string Match)[] Steps =
+    [
+        ("Gather evidence", "Logs, deployments, metrics and timeline", "Gathering"),
+        ("Search incident history", "Past incidents that match, chosen by code", "Searching"),
+        ("Check systems", "The same read-only checks every run", "Checking systems"),
+        ("Follow-up checks", "A few narrower questions, within a fixed limit", "follow-up|Claude is checking"),
+        ("Analyse the evidence", "Then every citation and number is validated", "Analysing"),
+    ];
+
+    [Parameter, EditorRequired] public Investigation Inv { get; set; } = new();
+
+    private int Active => Array.FindIndex(Steps, s => s.Match.Split('|').Any(m => Inv.Stage?.Contains(m, StringComparison.Ordinal) == true));
+}
