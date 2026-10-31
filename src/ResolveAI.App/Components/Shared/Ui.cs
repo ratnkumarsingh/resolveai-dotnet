@@ -48,6 +48,33 @@ public static class Ui
         _ => "bg-slate-200 text-slate-700",
     };
 
+    public static string SeverityRail(string severity) => severity switch
+    {
+        "SEV-1" => "from-red-500 to-rose-700",
+        "SEV-2" => "from-orange-400 to-orange-600",
+        "SEV-3" => "from-amber-300 to-amber-500",
+        _ => "from-slate-300 to-slate-500",
+    };
+
+    public static string SeverityGlow(string severity) => severity switch
+    {
+        "SEV-1" => "hover:shadow-red-200",
+        "SEV-2" => "hover:shadow-orange-200",
+        "SEV-3" => "hover:shadow-amber-200",
+        _ => "hover:shadow-slate-200",
+    };
+
+    /// <summary>A fixed colour per service name, so a service is easy to spot down the queue. The colour carries no status.</summary>
+    public static string ServiceChip(string service)
+    {
+        string[] palette =
+        [
+            "bg-sky-100 text-sky-800", "bg-violet-100 text-violet-800", "bg-teal-100 text-teal-800", "bg-fuchsia-100 text-fuchsia-800",
+            "bg-blue-100 text-blue-800", "bg-indigo-100 text-indigo-800", "bg-cyan-100 text-cyan-800", "bg-purple-100 text-purple-800",
+        ];
+        return palette[service.Sum(c => c) % palette.Length];
+    }
+
     public static string Status(string status) => status switch
     {
         "open" => "bg-red-50 text-red-700 ring-red-200",

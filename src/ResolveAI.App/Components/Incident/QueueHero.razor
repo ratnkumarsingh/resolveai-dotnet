@@ -1,0 +1,108 @@
+@inject AppService Service
+@inject NavigationManager Nav
+
+@* The home page's first screen: where to start, one click from an investigation, and how the queue stands. Everything shown comes from stored records. *@
+<section class="aurora relative overflow-hidden rounded-2xl p-5 text-white shadow-xl shadow-violet-900/20 sm:p-7" data-testid="queue-hero">
+    <div aria-hidden="true" class="pointer-events-none absolute -right-20 -top-24 h-72 w-72 rounded-full bg-sky-400/30 blur-3xl"></div>
+    <div aria-hidden="true" class="pointer-events-none absolute -bottom-28 left-1/4 h-72 w-72 rounded-full bg-amber-400/25 blur-3xl"></div>
+    <div class="relative grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+        <div class="min-w-0" data-testid="spotlight">
+            @if (Spotlight is null)
+            {
+                <p class="text-xs font-semibold uppercase tracking-widest text-indigo-100">All caught up</p>
+                <h2 class="mt-1 text-2xl font-bold sm:text-3xl">Nothing is waiting for you</h2>
+                <p class="mt-2 max-w-xl text-sm text-indigo-50">Every active incident has been investigated, and nothing needs review.</p>
+            }
+            else
+            {
+                <p class="text-xs font-semibold uppercase tracking-widest text-indigo-100">@(NeedsRun ? "Start here" : "Finish the review")</p>
+                <div class="mt-2 flex flex-wrap items-center gap-2 text-sm">
+                    <span class="font-mono text-indigo-100">@Spotlight.Key</span>
+                    <SeverityChip Severity="@Spotlight.Severity" />
+                    <span class="rounded bg-white/15 px-1.5 py-0.5 font-mono text-xs ring-1 ring-white/25">@Spotlight.ServiceName</span>
+                </div>
+                <h2 class="mt-2 text-2xl font-bold sm:text-3xl">@Spotlight.Title</h2>
+                <p class="mt-2 max-w-xl text-sm text-indigo-50">@Spotlight.ImpactSummary</p>
+                <div class="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2">
+                    @if (NeedsRun && Config.LlmMode != "live")
+                    {
+                        <button type="button" @onclick="Investigate" disabled="@_starting" data-testid="investigate-now"
+                                class="inline-flex items-center gap-2 rounded-lg bg-white px-5 py-2.5 text-sm font-semibold text-indigo-800 shadow-lg transition hover:-translate-y-0.5 hover:bg-indigo-50 disabled:opacity-70 motion-reduce:transform-none">
+                            @if (_starting)
+                            {
+                                <Spinner Class="h-4 w-4" />
+                            }
+                            Investigate now
+                        </button>
+                        <span class="text-xs text-indigo-50">Read-only checks, recorded analysis. No model is called.</span>
+                    }
+                    else
+                    {
+                        <a href="/incidents/@Spotlight.Key" data-testid="spotlight-open"
+                           class="inline-flex items-center rounded-lg bg-white px-5 py-2.5 text-sm font-semibold text-indigo-800 shadow-lg transition hover:-translate-y-0.5 hover:bg-indigo-50 motion-reduce:transform-none">
+                            @(NeedsRun ? "Go to this incident" : "Review the findings")
+                        </a>
+                        @if (NeedsRun)
+                        {
+                            <span class="text-xs text-indigo-50">Live runs use Claude and cost money, so you start them on the incident.</span>
+                        }
+                    }
+                </div>
+                @if (_error is not null)
+                {
+                    <div class="mt-3 text-slate-900"><ErrorBox Message="@_error" /></div>
+                }
+            }
+        </div>
+        <div class="grid grid-cols-2 gap-3 self-center">
+            @Tile("active", "Active", Stats.Active, "from-indigo-600 to-violet-800", Active, "Show every incident")
+            @Tile("sev1", "SEV-1", Stats.Sev1, "from-rose-600 to-red-800", Sev1, "Show only SEV-1 incidents")
+            @Tile("review", "Needs review", Stats.NeedsReview, "from-amber-700 to-orange-800", NeedsReview, "Show incidents waiting for a person to verify them")
+            @Tile("verified", "Verified", Stats.Verified, "from-emerald-700 to-teal-800", Verified, "Show incidents a person has verified")
+        </div>
+    </div>
+</section>
+
+@code {
+    public sealed record QueueStats(int Active, int Sev1, int NeedsReview, int Verified);
+
+    [Parameter, EditorRequired] public QueueStats Stats { get; set; } = new(0, 0, 0, 0);
+    [Parameter] public IncidentListItem? Spotlight { get; set; }
+    [Parameter, EditorRequired] public AppConfig Config { get; set; } = new();
+    [Parameter] public bool Active { get; set; }
+    [Parameter] public bool Sev1 { get; set; }
+    [Parameter] public bool NeedsReview { get; set; }
+    [Parameter] public bool Verified { get; set; }
+    [Parameter] public EventCallback<string> OnTile { get; set; }
+    [CascadingParameter(Name = "IsLocal")] private bool IsLocal { get; set; }
+
+    private bool _starting;
+    private string? _error;
+
+    private bool NeedsRun => Spotlight?.ReviewState == "none";
+
+    private RenderFragment Tile(string key, string label, int count, string gradient, bool pressed, string title) =>
+        @<button type="button" title="@title" aria-pressed="@Ui.Aria(pressed)" @onclick="() => OnTile.InvokeAsync(key)" data-testid="@($"tile-{key}")"
+                 class="@Ui.Cx("rounded-xl bg-gradient-to-br p-3 text-left text-white shadow-md ring-1 transition hover:-translate-y-0.5 hover:shadow-lg motion-reduce:transform-none", gradient, pressed ? "ring-2 ring-white" : "ring-white/20")">
+            <span class="block text-3xl font-bold leading-none">@count</span>
+            <span class="mt-1.5 block text-xs font-semibold">@label</span>
+        </button>;
+
+    private void Investigate()
+    {
+        if (Spotlight is null) return;
+        _starting = true;
+        _error = null;
+        try
+        {
+            // Always recorded: one click here can never start a paid run.
+            Service.StartInvestigation(Spotlight.Key, new StartInvestigationBody { Mode = "recorded" }, new Caller(null, IsLocal));
+            Nav.NavigateTo($"/incidents/{Spotlight.Key}");
+        }
+        catch (Exception err)
+        {
+            _starting = false;
+            _error = Ui.Message(err);
+        }
+    }
+}

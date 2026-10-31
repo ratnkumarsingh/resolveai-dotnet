@@ -4,11 +4,11 @@
 @inject NavigationManager Nav
 
 <div class="min-h-screen">
-    <div aria-hidden="true" class="h-1 bg-gradient-to-r from-sky-500 via-violet-500 via-60% to-emerald-500"></div>
-    <header class="border-b border-slate-200 bg-white">
+    <div aria-hidden="true" class="h-1 bg-gradient-to-r from-sky-400 via-fuchsia-400 via-60% to-amber-300"></div>
+    <header class="aurora text-white shadow-md">
         <div class="mx-auto flex max-w-7xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
-            <a href="/" class="flex items-center gap-2 font-semibold text-slate-900">
-                <span class="grid h-7 w-7 place-items-center rounded-md bg-gradient-to-br from-indigo-600 to-violet-600 text-white shadow-sm">
+            <a href="/" class="flex items-center gap-2 font-semibold text-white">
+                <span class="grid h-7 w-7 place-items-center rounded-md bg-white text-violet-700 shadow-sm">
                     <svg viewBox="0 0 32 32" class="h-4 w-4" aria-hidden="true">
                         <path d="M7 17l6 6 12-13" stroke="currentColor" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round" />
                     </svg>
@@ -18,7 +18,7 @@
             <nav class="flex gap-1 text-sm">
                 @foreach (var (to, label) in Links)
                 {
-                    <a href="@to" class="@Ui.Cx("rounded-md px-3 py-1.5", IsActive(to) ? "bg-slate-100 font-medium text-slate-900" : "text-slate-600 hover:text-slate-900")">@label</a>
+                    <a href="@to" class="@Ui.Cx("rounded-md px-3 py-1.5", IsActive(to) ? "bg-white font-semibold text-indigo-800 shadow-sm" : "text-indigo-50 hover:bg-white/15 hover:text-white")">@label</a>
                 }
             </nav>
             <div class="ml-auto flex items-center gap-2 text-xs">

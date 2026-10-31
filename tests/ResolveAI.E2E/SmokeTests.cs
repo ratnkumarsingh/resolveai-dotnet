@@ -23,7 +23,7 @@ public sealed class SmokeTests(AppFixture app)
         var page = await NewPage();
         await page.GotoAsync("/");
         await Expect(page.GetByText("Data source: Demo dataset")).ToBeVisibleAsync();
-        var row = page.GetByRole(AriaRole.Row, new() { NameRegex = new Regex("INC-1042") });
+        var row = page.GetByTestId("incident-card").Filter(new() { HasTextRegex = new Regex("INC-1042") });
         await row.GetByRole(AriaRole.Link, new() { Name = "Open incident" }).ClickAsync();
         await Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Payment API elevated 500 errors" })).ToBeVisibleAsync();
 
@@ -90,8 +90,8 @@ public sealed class SmokeTests(AppFixture app)
         // The incident waits in the review queue until a person verifies it.
         await page.GotoAsync("/");
         await page.GetByTestId("needs-review").ClickAsync();
-        await Expect(page.GetByRole(AriaRole.Row, new() { NameRegex = new Regex("INC-1042") })).ToContainTextAsync("Needs review");
-        await Expect(page.GetByRole(AriaRole.Row, new() { NameRegex = new Regex("INC-1043") })).ToHaveCountAsync(0);
+        await Expect(page.GetByTestId("incident-card").Filter(new() { HasTextRegex = new Regex("INC-1042") })).ToContainTextAsync("Needs review");
+        await Expect(page.GetByTestId("incident-card").Filter(new() { HasTextRegex = new Regex("INC-1043") })).ToHaveCountAsync(0);
 
         // Each system has its own MCP server and status.
         await page.GetByRole(AriaRole.Link, new() { Name = "Systems" }).ClickAsync();
@@ -171,17 +171,77 @@ public sealed class SmokeTests(AppFixture app)
     }
 
     [Fact]
+    public async Task The_home_page_starts_the_most_urgent_investigation_in_one_click()
+    {
+        Assert.True((await app.Http.PostAsync("/api/demo/reset", null)).IsSuccessStatusCode);
+        var page = await NewPage();
+        await page.GotoAsync("/");
+        var spotlight = page.GetByTestId("spotlight");
+        await Expect(spotlight).ToContainTextAsync("INC-1046");
+
+        // INC-1046 checks whatever SQL Server this machine has, so the run uses the next incident to stay independent of it.
+        app.Deps.Db.Run("UPDATE incidents SET status = 'resolved' WHERE key = 'INC-1046'");
+        await page.ReloadAsync();
+        await Expect(spotlight).ToContainTextAsync("INC-1042");
+
+        await page.GetByTestId("investigate-now").ClickAsync();
+        await Expect(page).ToHaveURLAsync(new Regex("/incidents/INC-1042$"));
+        await Expect(page.GetByTestId("leading-hypothesis")).ToBeVisibleAsync(new() { Timeout = 20_000 });
+
+        // The spotlight moves on to the next incident nobody has investigated.
+        await page.GotoAsync("/");
+        await Expect(spotlight).ToContainTextAsync("INC-1044");
+        await Expect(page.GetByTestId("tile-review")).ToContainTextAsync("1");
+
+        // With nothing active left to investigate or review, it says so.
+        app.Deps.Db.Run("UPDATE incidents SET status = 'resolved'");
+        app.Deps.Db.Run("DELETE FROM investigations");
+        await page.ReloadAsync();
+        await Expect(spotlight).ToContainTextAsync("Nothing is waiting for you");
+        Assert.True((await app.Http.PostAsync("/api/demo/reset", null)).IsSuccessStatusCode);
+    }
+
+    [Fact]
+    public async Task The_stat_tiles_filter_the_queue_and_keep_their_counts()
+    {
+        Assert.True((await app.Http.PostAsync("/api/demo/reset", null)).IsSuccessStatusCode);
+        var page = await NewPage();
+        await page.GotoAsync("/");
+        var cards = page.GetByTestId("incident-card");
+        var active = page.GetByTestId("tile-active");
+        await Expect(active).ToContainTextAsync("5");
+        await Expect(active).ToHaveAttributeAsync("aria-pressed", "true");
+        await Expect(cards).ToHaveCountAsync(6);
+
+        var sev1 = page.GetByTestId("tile-sev1");
+        await sev1.ClickAsync();
+        await Expect(cards).ToHaveCountAsync(2);
+        await Expect(sev1).ToHaveAttributeAsync("aria-pressed", "true");
+        await Expect(page.GetByLabel("Severity")).ToHaveValueAsync("SEV-1");
+        await Expect(active).ToContainTextAsync("5");
+        await Expect(page.GetByText("5 active · 2 shown")).ToBeVisibleAsync();
+
+        await sev1.ClickAsync();
+        await Expect(cards).ToHaveCountAsync(6);
+        await page.GetByLabel("Search incidents").FillAsync("pdf");
+        await Expect(cards).ToHaveCountAsync(1);
+        await active.ClickAsync();
+        await Expect(cards).ToHaveCountAsync(6);
+        await Expect(page.GetByLabel("Search incidents")).ToHaveValueAsync("");
+    }
+
+    [Fact]
     public async Task Filters_and_row_clicks_work_on_the_queue()
     {
         var page = await NewPage();
         await page.GotoAsync("/");
         await page.GetByLabel("Severity").SelectOptionAsync("SEV-2");
-        await Expect(page.GetByRole(AriaRole.Row, new() { NameRegex = new Regex("INC-1045") })).ToBeVisibleAsync();
-        await Expect(page.GetByRole(AriaRole.Row, new() { NameRegex = new Regex("INC-1046") })).ToHaveCountAsync(0);
+        await Expect(page.GetByTestId("incident-card").Filter(new() { HasTextRegex = new Regex("INC-1045") })).ToBeVisibleAsync();
+        await Expect(page.GetByTestId("incident-card").Filter(new() { HasTextRegex = new Regex("INC-1046") })).ToHaveCountAsync(0);
         await page.GetByLabel("Severity").SelectOptionAsync("");
         await page.GetByLabel("Search incidents").FillAsync("pdf");
-        await Expect(page.GetByText("1 active · 1 shown")).ToBeVisibleAsync();
-        await page.GetByText("Invoice PDF uploads failing").ClickAsync();
+        await Expect(page.GetByText(new Regex(@"\d+ active · 1 shown"))).ToBeVisibleAsync();
+        await page.GetByTestId("incident-card").GetByText("Invoice PDF uploads failing").ClickAsync();
         await Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Invoice PDF uploads failing" })).ToBeVisibleAsync();
         await page.GotoAsync("/not-a-page");
         await Expect(page.GetByText("Page not found.")).ToBeVisibleAsync();

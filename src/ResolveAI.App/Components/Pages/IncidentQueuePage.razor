@@ -4,17 +4,20 @@
 
 <PageTitle>ResolveAI</PageTitle>
 
-<div class="space-y-4">
+<div class="space-y-5">
+    <QueueHero Stats="_stats" Spotlight="_spotlight" Config="_config" OnTile="SelectTile"
+               Active="@NoFilters" Sev1="@(_severity == "SEV-1")" NeedsReview="@(_review == "pending")" Verified="@(_review == "verified")" />
+
     <div class="flex flex-wrap items-end justify-between gap-3">
         <div>
             <h1 class="text-xl font-semibold">Incident queue</h1>
-            <p class="text-sm text-slate-500">
-                @(_list is not null ? $"{Active} active · {_list.Total} shown" : "Loading incidents…")
+            <p class="text-sm text-slate-600">
+                @(_list is not null ? $"{_stats.Active} active · {_list.Total} shown" : "Loading incidents…")
             </p>
         </div>
         <div class="flex flex-wrap gap-2">
-            <button type="button" aria-pressed="@Ui.Aria(_review)" @onclick="ToggleReview" data-testid="needs-review"
-                    class="@Ui.Cx("rounded-full border px-3 py-1 text-sm", _review ? "border-amber-400 bg-amber-100 font-medium text-amber-900" : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50")">
+            <button type="button" aria-pressed="@Ui.Aria(_review == "pending")" @onclick="ToggleNeedsReview" data-testid="needs-review"
+                    class="@Ui.Cx("rounded-full border px-3 py-1 text-sm", _review == "pending" ? "border-amber-400 bg-amber-100 font-medium text-amber-900" : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50")">
                 Needs review
             </button>
             <input type="search" @bind="_q" @bind:event="oninput" @bind:after="Load" placeholder="Search key, title or service" aria-label="Search incidents"
@@ -49,57 +52,44 @@
     }
     @if (_list is { Items.Count: 0 })
     {
-        <Empty Title="@(_review ? "Nothing waiting for review" : "No incidents match these filters")">
-            @(_review ? "Every investigated incident has a verified root cause and a reviewed RCA." : "Clear the search or filters, or reseed the demo data from Settings.")
+        <Empty Title="@(_review == "pending" ? "Nothing waiting for review" : "No incidents match these filters")">
+            @(_review == "pending" ? "Every investigated incident has a verified root cause and a reviewed RCA." : "Clear the search or filters, or reseed the demo data from Settings.")
         </Empty>
     }
 
     @if (_list is { Items.Count: > 0 })
     {
-        <div class="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-            <table class="w-full text-left text-sm">
-                <thead class="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                    <tr>
-                        <th class="px-4 py-2">Incident</th>
-                        <th class="px-4 py-2">Severity</th>
-                        <th class="px-4 py-2">Service</th>
-                        <th class="px-4 py-2">Status</th>
-                        <th class="px-4 py-2">Review</th>
-                        <th class="px-4 py-2">Started</th>
-                        <th class="px-4 py-2">Age</th>
-                        <th class="px-4 py-2"></th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100">
-                    @foreach (var i in _list.Items)
-                    {
-                        var review = Ui.Review(i.ReviewState);
-                        <tr @key="i.Id" class="cursor-pointer hover:bg-slate-50" @onclick="() => Nav.NavigateTo(IncidentUrl(i))">
-                            <td class="px-4 py-3">
-                                <div class="font-medium text-slate-900">
-                                    <span class="font-mono text-xs text-slate-500">@i.Key</span> @i.Title
-                                </div>
-                                <div class="mt-0.5 line-clamp-1 text-xs text-slate-500">@i.ImpactSummary</div>
-                            </td>
-                            <td class="px-4 py-3"><SeverityChip Severity="@i.Severity" /></td>
-                            <td class="px-4 py-3 font-mono text-xs">@i.ServiceName</td>
-                            <td class="px-4 py-3"><StatusChip Status="@i.Status" /></td>
-                            <td class="whitespace-nowrap px-4 py-3">
-                                <span class="@Ui.Cx("rounded px-1.5 py-0.5 text-xs font-medium", review.Class)" title="@review.Title">@review.Label</span>
-                            </td>
-                            <td class="whitespace-nowrap px-4 py-3 text-xs text-slate-600">@Ui.FormatTime(i.StartedAt, true)</td>
-                            <td class="px-4 py-3 text-xs text-slate-600">@Ui.Age(i.StartedAt)</td>
-                            <td class="px-4 py-3 text-right">
-                                <a href="@IncidentUrl(i)" @onclick:stopPropagation="true"
-                                   class="inline-block whitespace-nowrap rounded-md bg-indigo-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-indigo-700">
-                                    Open incident
-                                </a>
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
+        <ul class="space-y-3">
+            @foreach (var i in _list.Items)
+            {
+                var review = Ui.Review(i.ReviewState);
+                <li @key="i.Id" data-testid="incident-card" @onclick="() => Nav.NavigateTo(IncidentUrl(i))"
+                    class="@Ui.Cx("flex cursor-pointer overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-slate-200 transition hover:-translate-y-0.5 hover:shadow-lg motion-reduce:transform-none", Ui.SeverityGlow(i.Severity))">
+                    <div aria-hidden="true" class="@Ui.Cx("w-2 shrink-0 bg-gradient-to-b", Ui.SeverityRail(i.Severity))"></div>
+                    <div class="flex min-w-0 flex-1 flex-wrap items-center gap-x-6 gap-y-3 p-4">
+                        <div class="min-w-0 flex-1 basis-72">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span class="font-mono text-xs text-slate-500">@i.Key</span>
+                                <SeverityChip Severity="@i.Severity" />
+                                <StatusChip Status="@i.Status" />
+                                <span class="@Ui.Cx("rounded px-1.5 py-0.5 font-mono text-xs font-medium", Ui.ServiceChip(i.ServiceName))">@i.ServiceName</span>
+                            </div>
+                            <div class="mt-1.5 font-semibold text-slate-900">@i.Title</div>
+                            <div class="mt-0.5 line-clamp-1 text-sm text-slate-600">@i.ImpactSummary</div>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-600">
+                            <span class="@Ui.Cx("whitespace-nowrap rounded px-1.5 py-0.5 font-medium", review.Class)" title="@review.Title">@review.Label</span>
+                            <span class="whitespace-nowrap" title="Started">@Ui.FormatTime(i.StartedAt, true)</span>
+                            <span class="whitespace-nowrap font-medium" title="Age">@Ui.Age(i.StartedAt)</span>
+                            <a href="@IncidentUrl(i)" @onclick:stopPropagation="true"
+                               class="inline-block whitespace-nowrap rounded-md bg-gradient-to-r from-indigo-600 to-violet-600 px-2.5 py-1 font-medium text-white hover:from-indigo-700 hover:to-violet-700">
+                                Open incident
+                            </a>
+                        </div>
+                    </div>
+                </li>
+            }
+        </ul>
     }
 </div>
 
@@ -110,26 +100,66 @@
     private string _severity = "";
     private string _status = "";
     private string _service = "";
-    private bool _review;
+    private string? _review;
     private IncidentList? _list;
     private string? _error;
+    private AppConfig _config = new();
+    private QueueHero.QueueStats _stats = new(0, 0, 0, 0);
+    private IncidentListItem? _spotlight;
 
-    private int Active => _list?.Items.Count(i => i.Status != "resolved") ?? 0;
+    private bool NoFilters => _q.Length == 0 && _severity.Length == 0 && _status.Length == 0 && _service.Length == 0 && _review is null;
     private static string IncidentUrl(IncidentListItem i) => $"/incidents/{i.Key}";
 
     protected override void OnInitialized() => Load();
 
-    private void ToggleReview()
+    private void ToggleNeedsReview() => SetReview("pending");
+
+    private void SetReview(string state)
     {
-        _review = !_review;
+        _review = _review == state ? null : state;
         Load();
+    }
+
+    private void SelectTile(string key)
+    {
+        switch (key)
+        {
+            case "sev1":
+                _severity = _severity == "SEV-1" ? "" : "SEV-1";
+                Load();
+                break;
+            case "review":
+                SetReview("pending");
+                break;
+            case "verified":
+                SetReview("verified");
+                break;
+            default:
+                _q = _severity = _status = _service = "";
+                _review = null;
+                Load();
+                break;
+        }
+    }
+
+    private int Count(string? status = null, string? severity = null, string? review = null) =>
+        Service.ListIncidents(status, severity, null, null, review, 1, 1).Total;
+
+    private void LoadOverview()
+    {
+        _config = Service.Config();
+        _stats = new(Count() - Count(status: "resolved"), Count(severity: "SEV-1"), Count(review: "pending"), Count(review: "verified"));
+        // The list is already most urgent first, with resolved incidents last.
+        _spotlight = Service.ListIncidents(null, null, null, null, "none", 1, 1).Items.FirstOrDefault(i => i.Status != "resolved")
+            ?? Service.ListIncidents(null, null, null, null, "pending", 1, 1).Items.FirstOrDefault();
     }
 
     private void Load()
     {
         try
         {
-            _list = Service.ListIncidents(_status, _severity, _service, _q, _review ? "pending" : null, 1, 25);
+            LoadOverview();
+            _list = Service.ListIncidents(_status, _severity, _service, _q, _review, 1, 25);
             _error = null;
         }
         catch (Exception err)

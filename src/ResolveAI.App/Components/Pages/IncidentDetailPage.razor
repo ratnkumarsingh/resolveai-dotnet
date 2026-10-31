@@ -109,7 +109,7 @@ else if (_detail is not null)
             @foreach (var (key, label) in Tabs)
             {
                 <button type="button" role="tab" aria-selected="@Ui.Aria(_tab == key)" @onclick="() => SetTab(key)"
-                        class="@Ui.Cx("-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm", _tab == key ? "border-indigo-600 font-medium text-indigo-700" : "border-transparent text-slate-600 hover:text-slate-900")">
+                        class="@Ui.Cx("-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm", _tab == key ? "tab-active font-semibold text-violet-800" : "border-transparent text-slate-600 hover:text-violet-800")">
                     @label
                     @if (key == "findings" && Running)
                     {

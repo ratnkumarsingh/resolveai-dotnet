@@ -24,6 +24,8 @@ public sealed class AppFixture : IAsyncLifetime
     public string BaseUrl { get; private set; } = "";
     public HttpClient Http { get; private set; } = new();
     public AppDeps Deps => _deps!;
+    /// <summary>Starts the server with live Claude as its default. The key is fake, so a run started by mistake would fail, not spend money.</summary>
+    public bool LiveByDefault { get; init; }
 
     public async Task InitializeAsync()
     {
@@ -36,6 +38,8 @@ public sealed class AppFixture : IAsyncLifetime
             DemoMode = true,
             LiveAccessCode = AccessCode,
             MaxFollowUps = 8,
+            ApiKey = LiveByDefault ? "fake-key-for-tests" : null,
+            LlmMode = LiveByDefault ? "live" : "recorded",
         });
         _factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
         {

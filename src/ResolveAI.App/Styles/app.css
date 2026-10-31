@@ -9,6 +9,32 @@
 
 body {
   @apply bg-slate-50 text-slate-900 antialiased;
+  background-image:
+    radial-gradient(60rem 30rem at 100% 0, rgb(217 70 239 / 0.1), transparent),
+    radial-gradient(50rem 30rem at 0 20rem, rgb(14 165 233 / 0.1), transparent),
+    radial-gradient(50rem 30rem at 60% 100%, rgb(245 158 11 / 0.08), transparent);
+  background-attachment: fixed;
+}
+
+/* White text stays readable on every colour of this gradient. It drifts once and stops: a gradient that keeps
+   animating repaints constantly, which is too much CPU for a page people leave open all day. */
+.aurora {
+  background-image: linear-gradient(110deg, #312e81, #5b21b6 35%, #86198f 70%, #9f1239);
+  background-size: 200% 200%;
+  animation: aurora-drift 6s ease-out both;
+}
+
+@keyframes aurora-drift {
+  from { background-position: 0% 50%; }
+  to { background-position: 100% 50%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aurora { animation: none; }
+}
+
+.tab-active {
+  border-image: linear-gradient(90deg, #6366f1, #d946ef, #f59e0b) 1;
 }
 
 .flash {
