@@ -1,0 +1,960 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ResolveAI: Technical Architecture and Design</title>
+<meta name="author" content="ResolveAI project">
+<style>
+  @page {
+    size: A4;
+    margin: 20mm 17mm 18mm 17mm;
+    @bottom-left { content: "ResolveAI: Technical Architecture and Design"; font: 8pt "Segoe UI", Arial, sans-serif; color: #64748b; }
+    @bottom-right { content: counter(page); font: 8pt "Segoe UI", Arial, sans-serif; color: #64748b; }
+  }
+  @page :first { margin: 0; @bottom-left { content: none; } @bottom-right { content: none; } }
+  @page parta { @top-right { content: "AS-BUILT"; font: bold 8pt "Segoe UI", Arial, sans-serif; color: #3730a3; } }
+  @page roadmap { @top-right { content: "GAPS AND ROADMAP"; font: bold 8pt "Segoe UI", Arial, sans-serif; color: #475569; } }
+  @page partb { @top-right { content: "PLANNED: NOT BUILT"; font: bold 8pt "Segoe UI", Arial, sans-serif; color: #b45309; } }
+
+  :root { --ink: #0f172a; --body: #334155; --muted: #64748b; --line: #cbd5e1; --soft: #f1f5f9; --built: #4338ca; --builtsoft: #eef2ff; --plan: #b45309; --plansoft: #fffbeb; --bad: #b91c1c; --good: #047857; }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { font: 10pt/1.48 "Segoe UI", Arial, sans-serif; color: var(--body); margin: 0; }
+  h1, h2, h3, h4 { color: var(--ink); line-height: 1.25; break-after: avoid; }
+  h1 { font-size: 20pt; margin: 0 0 10pt; padding-bottom: 6pt; border-bottom: 2pt solid var(--built); }
+  h2 { font-size: 13pt; margin: 16pt 0 5pt; }
+  h3 { font-size: 10.5pt; margin: 11pt 0 3pt; }
+  p { margin: 0 0 7pt; orphans: 3; widows: 3; }
+  ul, ol { margin: 0 0 8pt; padding-left: 16pt; }
+  li { margin-bottom: 3pt; }
+  code { font: 8.6pt Consolas, "Cascadia Code", monospace; background: var(--soft); padding: 0 2.5pt; border-radius: 2pt; color: #1e293b; }
+  pre { font: 8pt/1.4 Consolas, monospace; background: #0f172a; color: #e2e8f0; padding: 8pt 10pt; border-radius: 4pt; white-space: pre-wrap; word-break: break-word; break-inside: avoid; margin: 0 0 9pt; }
+  table { width: 100%; border-collapse: collapse; margin: 3pt 0 10pt; font-size: 8.8pt; }
+  thead { display: table-header-group; }
+  th { text-align: left; background: var(--soft); color: var(--ink); padding: 4pt 6pt; border-bottom: 1pt solid var(--line); font-weight: 600; }
+  td { padding: 4pt 6pt; border-bottom: .5pt solid #e2e8f0; vertical-align: top; }
+  tr { break-inside: avoid; }
+  a { color: inherit; text-decoration: none; }
+  figure { margin: 6pt 0 11pt; break-inside: avoid; }
+  figcaption { font-size: 8.3pt; color: var(--muted); margin-top: 3pt; }
+  svg { width: 100%; height: auto; display: block; }
+  section.chapter { break-before: page; }
+  #s7 h3 { margin-top: 8pt; }
+  #s7 p { margin-bottom: 4pt; font-size: 9.5pt; line-height: 1.4; }
+  .parta { page: parta; }
+  .roadmap { page: roadmap; }
+  .partb { page: partb; }
+  .note { background: var(--soft); border-left: 3pt solid var(--muted); padding: 6pt 9pt; margin: 6pt 0 10pt; break-inside: avoid; font-size: 9.2pt; }
+  .warn { background: #fef2f2; border-left-color: var(--bad); }
+  .plan { background: var(--plansoft); border-left-color: var(--plan); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8pt 12pt; }
+  .card { border: .75pt solid var(--line); border-radius: 4pt; padding: 7pt 9pt; break-inside: avoid; font-size: 9pt; }
+  .card h3 { margin-top: 0; }
+  .tag { display: inline-block; font-size: 7.5pt; font-weight: 700; padding: 0 4pt; border-radius: 2pt; letter-spacing: .02em; }
+  .tb { background: var(--builtsoft); color: var(--built); }
+  .tp { background: #fef3c7; color: var(--plan); }
+  .tg { background: #fee2e2; color: var(--bad); }
+
+  .cover { page: cover; height: 297mm; padding: 62mm 22mm 20mm; background: linear-gradient(150deg, #312e81 0%, #4338ca 55%, #6d28d9 100%); color: #fff; break-after: page; position: relative; }
+  .cover h1 { color: #fff; font-size: 34pt; border: 0; margin: 0 0 8pt; font-weight: 700; }
+  .cover .sub { font-size: 16pt; color: #e0e7ff; margin-bottom: 26pt; }
+  .cover p { color: #e0e7ff; font-size: 10.5pt; max-width: 135mm; }
+  .cover dl { position: absolute; left: 22mm; bottom: 24mm; display: grid; grid-template-columns: 30mm 1fr; gap: 2pt 6pt; font-size: 9.5pt; margin: 0; color: #e0e7ff; }
+  .cover dt { font-weight: 600; color: #fff; } .cover dd { margin: 0; }
+  .toc { list-style: none; padding: 0; margin: 0; }
+  .toc li { display: flex; align-items: baseline; margin: 0; padding: 2.4pt 0; font-size: 10pt; }
+  .toc li.part { font-weight: 700; color: var(--ink); margin-top: 7pt; }
+  .toc li .dots { flex: 1; border-bottom: .75pt dotted var(--line); margin: 0 5pt; transform: translateY(-2.5pt); }
+  .toc li.sub { padding-left: 10pt; }
+
+  /* Diagram styles */
+  .bx { fill: var(--builtsoft); stroke: var(--built); stroke-width: 1.1; }
+  .bn { fill: #fff; stroke: #94a3b8; stroke-width: 1; }
+  .bg { fill: #ecfdf5; stroke: #059669; stroke-width: 1.1; }
+  .ba { fill: #fff7ed; stroke: #ea580c; stroke-width: 1.1; }
+  .bd { fill: #fef2f2; stroke: #dc2626; stroke-width: 1.1; }
+  .bp { fill: var(--plansoft); stroke: var(--plan); stroke-width: 1.2; stroke-dasharray: 5 3; }
+  .zone { fill: none; stroke: #94a3b8; stroke-width: 1; stroke-dasharray: 3 3; }
+  .zp { fill: none; stroke: var(--plan); stroke-width: 1; stroke-dasharray: 3 3; }
+  .t { font: 600 11px "Segoe UI", Arial, sans-serif; fill: var(--ink); }
+  .s { font: 9.5px "Segoe UI", Arial, sans-serif; fill: #475569; }
+  .z { font: 600 9.5px "Segoe UI", Arial, sans-serif; fill: #64748b; }
+  .ap { font: 600 9.5px "Segoe UI", Arial, sans-serif; fill: var(--plan); }
+  .l { stroke: #475569; stroke-width: 1.1; fill: none; marker-end: url(#a); }
+  .lp { stroke: var(--plan); stroke-width: 1.1; fill: none; marker-end: url(#ap); stroke-dasharray: 4 3; }
+  .lr { stroke: #dc2626; stroke-width: 1.1; fill: none; marker-end: url(#ar); stroke-dasharray: 4 3; }
+  .ln { stroke: #94a3b8; stroke-width: 1; stroke-dasharray: 3 3; fill: none; }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <marker id="a" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L8 4L0 8z" fill="#475569"/></marker>
+  <marker id="ap" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L8 4L0 8z" fill="#b45309"/></marker>
+  <marker id="ar" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L8 4L0 8z" fill="#dc2626"/></marker>
+</defs></svg>
+
+<div class="cover">
+  <h1>ResolveAI</h1>
+  <div class="sub">Technical Architecture and Design</div>
+  <p>An incident investigation copilot: it gathers evidence from read-only systems, produces cited root-cause hypotheses and drafts an RCA for a person to verify. Nothing is executed automatically.</p>
+  <dl>
+    <dt>Version</dt><dd>1.0, 31 October 2026</dd>
+    <dt>Describes</dt><dd>Branch <b>feature/dotnet-port</b>, commit <b>a247662</b></dd>
+    <dt>Stack</dt><dd>.NET 10, Blazor Server, ASP.NET Core, SQLite, MCP, Claude</dd>
+    <dt>Status</dt><dd>Working demo with synthetic data. Live Claude not yet run for real.</dd>
+  </dl>
+</div>
+
+<section>
+  <h1>Contents</h1>
+  <ol class="toc">
+    <li><a href="#s1">1. Executive summary and reader's guide</a><span class="dots"></span><span>@P1@</span></li>
+    <li class="part">Part A: As-built, verified against the code</li>
+    <li class="sub"><a href="#s2">2. Architecture</a><span class="dots"></span><span>@P2@</span></li>
+    <li class="sub"><a href="#s3">3. Workflows</a><span class="dots"></span><span>@P3@</span></li>
+    <li class="sub"><a href="#s4">4. Components</a><span class="dots"></span><span>@P4@</span></li>
+    <li class="sub"><a href="#s5">5. MCP servers</a><span class="dots"></span><span>@P5@</span></li>
+    <li class="sub"><a href="#s6">6. Data model and API</a><span class="dots"></span><span>@P6@</span></li>
+    <li class="sub"><a href="#s7">7. Design decisions</a><span class="dots"></span><span>@P7@</span></li>
+    <li class="sub"><a href="#s8">8. Security and threat model</a><span class="dots"></span><span>@P8@</span></li>
+    <li class="sub"><a href="#s9">9. Deployment and operations</a><span class="dots"></span><span>@P9@</span></li>
+    <li class="sub"><a href="#s10">10. Testing</a><span class="dots"></span><span>@P10@</span></li>
+    <li class="part">Gaps and roadmap</li>
+    <li class="sub"><a href="#s11">11. Risks, limitations and gaps</a><span class="dots"></span><span>@P11@</span></li>
+    <li class="sub"><a href="#s12">12. Roadmap</a><span class="dots"></span><span>@P12@</span></li>
+    <li class="part">Part B: Future target architecture, a plan that is not built</li>
+    <li class="sub"><a href="#s13">13. Target architecture</a><span class="dots"></span><span>@P13@</span></li>
+    <li class="part">Appendices</li>
+    <li class="sub"><a href="#apx">A. Configuration, glossary and samples</a><span class="dots"></span><span>@PA@</span></li>
+  </ol>
+
+  <h2>How to read the diagrams</h2>
+  <figure>
+    <svg viewBox="0 0 680 44" role="img" aria-label="Legend">
+      <rect x="1" y="8" width="150" height="28" rx="4" class="bx"/><text x="76" y="26" text-anchor="middle" class="t">Built and tested</text>
+      <rect x="170" y="8" width="150" height="28" rx="4" class="bp"/><text x="245" y="26" text-anchor="middle" class="t" style="fill:#b45309">Planned, not built</text>
+      <rect x="339" y="8" width="150" height="28" rx="4" class="bn"/><text x="414" y="26" text-anchor="middle" class="t">External system</text>
+      <rect x="508" y="8" width="170" height="28" rx="4" class="zone"/><text x="593" y="26" text-anchor="middle" class="z">Trust or process boundary</text>
+    </svg>
+  </figure>
+  <p>Each page header shows which kind of content it holds: <span class="tag tb">AS-BUILT</span>, <span class="tag" style="background:#e2e8f0;color:#475569">GAPS AND ROADMAP</span> or <span class="tag tp">PLANNED: NOT BUILT</span>. Statements in Part A were checked against the source. Nothing in Part B exists yet; products named there are options to integrate and none of them have been tested.</p>
+</section>
+
+<section class="chapter" id="s1">
+  <h1>1. Executive summary</h1>
+  <h2>The problem</h2>
+  <p>During an incident, on-call engineers jump between logs, deployment history, dashboards, runbooks and old postmortems while the clock runs. AI assistants can help, but one that invents log lines, cites nothing or changes production is worse than none.</p>
+  <h2>The approach</h2>
+  <p>ResolveAI pulls the evidence for one incident into a single workflow and asks Claude to reason only over that evidence. Three rules shape the design:</p>
+  <ul>
+    <li><b>Evidence first.</b> Code gathers the evidence and picks similar past incidents. Every record gets a typed ID, and the server removes any citation it can't match to a real record.</li>
+    <li><b>Read-only by construction.</b> Each system sits behind its own MCP server with fixed, parameterised checks. No tool runs arbitrary SQL or shell commands.</li>
+    <li><b>A person decides.</b> Output is labelled as a draft, checks are recommendations, and an incident stays in a review queue until someone records a verified cause and reviews the RCA.</li>
+  </ul>
+  <h2>Current status</h2>
+  <div class="grid2">
+    <div class="card"><h3>Working today</h3>
+      <ul>
+        <li>Blazor Server UI and HTTP API on one ASP.NET Core app</li>
+        <li>Full investigation pipeline in recorded mode</li>
+        <li>Four read-only MCP servers, with 17 tools, including real SQL Server checks</li>
+        <li>RCA drafting, editing, versioning and Markdown export</li>
+        <li>205 automated tests, plus a Docker image</li>
+      </ul>
+    </div>
+    <div class="card"><h3>Not done or not proven</h3>
+      <ul>
+        <li><b>Live Claude has never run against the real API.</b> It is only tested against a fake API.</li>
+        <li>Data is synthetic, apart from optional SQL Server checks</li>
+        <li>No user accounts; a shared access code gates paid runs</li>
+        <li>CI workflow has not yet run on GitHub</li>
+        <li>Single process, with SQLite</li>
+      </ul>
+    </div>
+  </div>
+  <h2>Key risks</h2>
+  <table>
+    <thead><tr><th style="width:36%">Risk</th><th>Why it matters</th><th style="width:15%">Section</th></tr></thead>
+    <tbody>
+      <tr><td>Quality of live analysis is unproven</td><td>The core value claim rests on Claude choosing useful checks and reasoning well over real evidence. Recorded mode can't show this.</td><td>11, 12</td></tr>
+      <tr><td>Evidence leaves the network in live mode</td><td>Redaction is pattern-based and can miss a secret. On-premises sites need an explicit decision about this.</td><td>8, 13.4</td></tr>
+      <tr><td>No sign-in or per-user permissions</td><td>The app is safe only because it binds to localhost. It can't be shared as it stands.</td><td>8, 13.2</td></tr>
+    </tbody>
+  </table>
+  <h2>Where the design is heading</h2>
+  <p>Part B describes a plan for an on-premises deployment: one Windows Server, SQL Server, Windows sign-in with Active Directory roles, Claude reached by direct API or private cloud link per site, and more evidence sources added as further read-only MCP servers.</p>
+
+  <h2>Reader's guide</h2>
+  <table>
+    <thead><tr><th style="width:24%">If you are</th><th style="width:26%">Read</th><th>You will be able to</th></tr></thead>
+    <tbody>
+      <tr><td><b>A new engineer</b></td><td>Sections 3, 4, 5, 6, 10</td><td>Understand, run and safely change the system</td></tr>
+      <tr><td><b>An architecture reviewer</b></td><td>Sections 2, 7, 11, 13</td><td>Judge the design, its trade-offs and its risks</td></tr>
+      <tr><td><b>A hiring or demo audience</b></td><td>Sections 1, 2</td><td>See what was built and the engineering thinking behind it</td></tr>
+      <tr><td><b>An enterprise adopter</b></td><td>Sections 8, 9, 11, 12, 13</td><td>Assess security, operations and what production would take</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="chapter parta" id="s2">
+  <h1>2. Architecture</h1>
+  <h2>2.1 System context</h2>
+  <p>ResolveAI sits between an on-call engineer and the systems they would otherwise check by hand. It only reads from those systems, and only calls out to Claude in live mode.</p>
+  <figure>
+    <svg viewBox="0 0 680 232" role="img" aria-label="System context diagram">
+      <rect x="10" y="88" width="130" height="56" rx="5" class="bn"/><text x="75" y="112" text-anchor="middle" class="t">On-call engineer</text><text x="75" y="127" text-anchor="middle" class="s">browser</text>
+      <rect x="240" y="72" width="170" height="88" rx="5" class="bx"/><text x="325" y="106" text-anchor="middle" class="t">ResolveAI</text><text x="325" y="122" text-anchor="middle" class="s">gathers evidence, analyses,</text><text x="325" y="135" text-anchor="middle" class="s">validates, drafts the RCA</text>
+      <rect x="520" y="8" width="150" height="40" rx="5" class="bn"/><text x="595" y="32" text-anchor="middle" class="t">SQL Server</text>
+      <rect x="520" y="56" width="150" height="40" rx="5" class="bn"/><text x="595" y="80" text-anchor="middle" class="t">Log and config files</text>
+      <rect x="520" y="104" width="150" height="40" rx="5" class="bn"/><text x="595" y="128" text-anchor="middle" class="t">Git and deploy feed</text>
+      <rect x="520" y="152" width="150" height="40" rx="5" class="bn"/><text x="595" y="176" text-anchor="middle" class="t">Metric series, host</text>
+      <rect x="240" y="192" width="170" height="34" rx="5" class="bn"/><text x="325" y="213" text-anchor="middle" class="t">Claude API (live mode only)</text>
+      <path d="M140 116H238" class="l"/><text x="190" y="108" text-anchor="middle" class="s">HTTP, WebSocket</text>
+      <path d="M410 100L518 28" class="l"/><path d="M410 108L518 76" class="l"/><path d="M410 120L518 124" class="l"/><path d="M410 132L518 172" class="l"/>
+      <text x="470" y="44" text-anchor="middle" class="s">read only</text>
+      <path d="M325 160V190" class="l"/><text x="332" y="179" class="s">redacted evidence, HTTPS</text>
+    </svg>
+    <figcaption>Figure 1. System context. All connections to the systems on the right are read-only.</figcaption>
+  </figure>
+
+  <h2>2.2 Containers and processes</h2>
+  <p>One ASP.NET Core process serves both the UI and the API. It starts one child process per system when it boots and talks to each over MCP on stdio.</p>
+  <figure>
+    <svg viewBox="0 0 680 366" role="img" aria-label="Container diagram">
+      <rect x="5" y="5" width="670" height="266" rx="6" class="zone"/><text x="15" y="20" class="z">ResolveAI.App process (ASP.NET Core, .NET 10), binds to 127.0.0.1:8787</text>
+      <rect x="20" y="30" width="190" height="50" rx="5" class="bx"/><text x="115" y="51" text-anchor="middle" class="t">Blazor Server UI</text><text x="115" y="66" text-anchor="middle" class="s">Components/, SignalR circuit</text>
+      <rect x="230" y="30" width="190" height="50" rx="5" class="bx"/><text x="325" y="51" text-anchor="middle" class="t">HTTP API</text><text x="325" y="66" text-anchor="middle" class="s">Api/ApiEndpoints.cs, /api/*</text>
+      <rect x="20" y="104" width="400" height="44" rx="5" class="bx"/><text x="220" y="123" text-anchor="middle" class="t">AppService</text><text x="220" y="138" text-anchor="middle" class="s">the one place for access code, daily limit, input limits and ownership checks</text>
+      <rect x="20" y="170" width="125" height="86" rx="5" class="bx"/><text x="82" y="192" text-anchor="middle" class="t">Pipeline</text><text x="82" y="208" text-anchor="middle" class="s">Evidence, Similar,</text><text x="82" y="221" text-anchor="middle" class="s">Packet, Sanitizer,</text><text x="82" y="234" text-anchor="middle" class="s">Validate</text>
+      <rect x="157" y="170" width="125" height="86" rx="5" class="bx"/><text x="219" y="192" text-anchor="middle" class="t">LLM providers</text><text x="219" y="208" text-anchor="middle" class="s">RecordedProvider,</text><text x="219" y="221" text-anchor="middle" class="s">ClaudeProvider,</text><text x="219" y="234" text-anchor="middle" class="s">Prompts, Schemas</text>
+      <rect x="294" y="170" width="126" height="86" rx="5" class="bx"/><text x="357" y="192" text-anchor="middle" class="t">MCP hub</text><text x="357" y="208" text-anchor="middle" class="s">Baseline plan, starts,</text><text x="357" y="221" text-anchor="middle" class="s">calls and filters</text><text x="357" y="234" text-anchor="middle" class="s">the servers</text>
+      <rect x="470" y="104" width="190" height="60" rx="5" class="bg"/><text x="565" y="128" text-anchor="middle" class="t">SQLite</text><text x="565" y="144" text-anchor="middle" class="s">WAL mode, FTS5 search</text>
+      <rect x="470" y="30" width="190" height="50" rx="5" class="bn"/><text x="565" y="51" text-anchor="middle" class="t">Claude API</text><text x="565" y="66" text-anchor="middle" class="s">live mode only</text>
+      <path d="M115 80V102" class="l"/><path d="M325 80V102" class="l"/><path d="M82 148V168" class="l"/><path d="M219 148V168" class="l"/><path d="M357 148V168" class="l"/>
+      <path d="M420 126H468" class="l"/>
+      <path d="M219 256V264H444V55H468" class="l"/><text x="448" y="98" class="s">live</text>
+      <rect x="5" y="288" width="670" height="72" rx="6" class="zone"/><text x="15" y="303" class="z">Child processes: ResolveAI.Mcp &lt;server&gt;, stdio, minimal environment (no API key or access code)</text><path d="M357 256V287" class="l"/>
+      <rect x="20" y="310" width="150" height="40" rx="5" class="bx"/><text x="95" y="334" text-anchor="middle" class="t">sqlserver (7 tools)</text>
+      <rect x="182" y="310" width="150" height="40" rx="5" class="bx"/><text x="257" y="334" text-anchor="middle" class="t">files (5 tools)</text>
+      <rect x="344" y="310" width="150" height="40" rx="5" class="bx"/><text x="419" y="334" text-anchor="middle" class="t">deploys (2 tools)</text>
+      <rect x="506" y="310" width="154" height="40" rx="5" class="bx"/><text x="583" y="334" text-anchor="middle" class="t">metrics (3 tools)</text>
+      
+    </svg>
+    <figcaption>Figure 2. Containers. The UI calls AppService directly; the HTTP API exists for scripts, the export route and compatibility.</figcaption>
+  </figure>
+
+  <h2 style="break-before:page;margin-top:0">2.3 Technology</h2>
+  <table>
+    <thead><tr><th style="width:24%">Concern</th><th style="width:34%">Choice</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Runtime</td><td>.NET 10, ASP.NET Core</td><td>One language across UI, API and tools</td></tr>
+      <tr><td>UI</td><td>Blazor Server, interactive, no prerender</td><td>Secrets and logic stay on the server; no separate front-end build</td></tr>
+      <tr><td>Styling</td><td>Tailwind 4.3.3; generated CSS committed</td><td>Running the app needs only the .NET SDK</td></tr>
+      <tr><td>Data</td><td>SQLite through Microsoft.Data.Sqlite and Dapper</td><td>No database to install; FTS5 gives keyword search</td></tr>
+      <tr><td>LLM</td><td>Official <code>Anthropic</code> .NET SDK, model <code>claude-opus-5-5</code></td><td>Structured output, tool runner, server-side fallback</td></tr>
+      <tr><td>Tool protocol</td><td><code>ModelContextProtocol</code> SDK over stdio, pinned to version 2025-11-25</td><td>A standard boundary; servers also work from Claude Code</td></tr>
+      <tr><td>SQL Server access</td><td>Microsoft.Data.SqlClient</td><td>Windows sign-in or a SQL login, with one driver</td></tr>
+      <tr><td>Tests</td><td>xUnit, WebApplicationFactory, Microsoft.Playwright</td><td>API and real-browser tests in the same language</td></tr>
+    </tbody>
+  </table>
+
+  <h2>2.4 Project layout</h2>
+<pre>ResolveAI.sln
+  src/ResolveAI.Contracts/   DTOs, JSON rules, evidence IDs, JavaScript-compatible formatting
+  src/ResolveAI.Mcp/         executable: ResolveAI.Mcp &lt;sqlserver|files|deploys|metrics&gt;
+  src/ResolveAI.App/
+    Api/                     HTTP routes and error mapping
+    Components/              Blazor pages (Pages/), incident views (Incident/), shared parts (Shared/)
+    Data/                    SQLite access, migrations, demo seed
+    Llm/                     providers, prompts, output schemas
+    Mcp/                     hub and baseline check plan
+    Pipeline/                evidence, similar incidents, packet, redaction, validation
+    Services/                AppService, investigations, RCA, incidents, access code store
+  tests/ResolveAI.Tests/     unit, API, MCP, golden and attack tests
+  tests/ResolveAI.E2E/       browser tests on a temporary database and a free port
+  demo-systems/              synthetic logs, deploy feed, metrics, SQL Server setup and scenario
+  tools/css/                 regenerates the committed CSS (the only use of Node)</pre>
+</section>
+
+<section class="chapter parta" id="s3">
+  <h1>3. Workflows</h1>
+  <h2>3.1 Investigation, end to end</h2>
+  <p>Starting a run returns HTTP 202 at once and the work continues on a background task. Each stage's timing and counts are stored as a trace, shown in the UI as <i>How this was produced</i>. The UI polls every 1.5 seconds.</p>
+  <figure>
+    <svg viewBox="0 0 680 500" role="img" aria-label="Investigation workflow">
+      <rect x="170" y="4" width="260" height="30" rx="15" class="bn"/><text x="300" y="23" text-anchor="middle" class="t">Engineer clicks Run investigation</text>
+      <rect x="130" y="50" width="340" height="38" rx="5" class="bx"/><text x="300" y="66" text-anchor="middle" class="t">AppService checks</text><text x="300" y="80" text-anchor="middle" class="s">input limits, reuse a running run, access code and daily limit if live</text>
+      <rect x="130" y="102" width="340" height="38" rx="5" class="bx"/><text x="300" y="118" text-anchor="middle" class="t">1. Gather evidence</text><text x="300" y="132" text-anchor="middle" class="s">logs, deploys, metrics, timeline, runbooks. No model involved</text>
+      <rect x="130" y="154" width="340" height="38" rx="5" class="bx"/><text x="300" y="170" text-anchor="middle" class="t">2. Search incident history</text><text x="300" y="184" text-anchor="middle" class="s">FTS5 bm25 over past incidents, with a same-service boost</text>
+      <rect x="130" y="206" width="340" height="38" rx="5" class="bx"/><text x="300" y="222" text-anchor="middle" class="t">3. Baseline checks (MCP)</text><text x="300" y="236" text-anchor="middle" class="s">the same read-only checks every run; results become mcp:N</text>
+      <rect x="130" y="258" width="340" height="38" rx="5" class="bx"/><text x="300" y="274" text-anchor="middle" class="t">4. Build evidence packet</text><text x="300" y="288" text-anchor="middle" class="s">redact, dedupe, bound to 40 log groups and 40,000 characters</text>
+      <rect x="130" y="310" width="340" height="38" rx="5" class="bx"/><text x="300" y="326" text-anchor="middle" class="t">5. Follow-up checks</text><text x="300" y="340" text-anchor="middle" class="s">Claude picks (live) or replayed (recorded), default limit 8 calls</text>
+      <rect x="130" y="362" width="340" height="38" rx="5" class="bx"/><text x="300" y="378" text-anchor="middle" class="t">6. Analyse</text><text x="300" y="392" text-anchor="middle" class="s">structured output; a malformed reply is retried once</text>
+      <rect x="130" y="414" width="340" height="38" rx="5" class="bx"/><text x="300" y="430" text-anchor="middle" class="t">7. Validate output</text><text x="300" y="444" text-anchor="middle" class="s">citations, unsafe checks, invented numbers, bounds, score and rank</text>
+      <rect x="170" y="466" width="260" height="30" rx="15" class="bg"/><text x="300" y="485" text-anchor="middle" class="t">Stored in one transaction: completed</text>
+      <path d="M300 34V48" class="l"/><path d="M300 88V100" class="l"/><path d="M300 140V152" class="l"/><path d="M300 192V204" class="l"/><path d="M300 244V256" class="l"/><path d="M300 296V308" class="l"/><path d="M300 348V360" class="l"/><path d="M300 400V412" class="l"/><path d="M300 452V464" class="l"/>
+      <rect x="500" y="50" width="170" height="38" rx="5" class="bd"/><text x="585" y="66" text-anchor="middle" class="t">Refused</text><text x="585" y="80" text-anchor="middle" class="s">HTTP 400, 403 or 429</text><path d="M470 69H498" class="lr"/>
+      <rect x="500" y="306" width="170" height="46" rx="5" class="ba"/><text x="585" y="322" text-anchor="middle" class="t">Failure doesn't stop the run</text><text x="585" y="336" text-anchor="middle" class="s">120 s limit; noted, then analysis</text><text x="585" y="348" text-anchor="middle" class="s">runs on what was gathered</text><path d="M470 329H498" class="lr"/>
+      <rect x="500" y="362" width="170" height="38" rx="5" class="bd"/><text x="585" y="378" text-anchor="middle" class="t">Run marked failed</text><text x="585" y="392" text-anchor="middle" class="s">180 s limit; readable message</text><path d="M470 381H498" class="lr"/>
+      <text x="8" y="225" class="s">Failed check: recorded</text><text x="8" y="238" class="s">as failed, run continues</text>
+    </svg>
+    <figcaption>Figure 3. Investigation workflow. Stages 1 to 4 and 7 involve no model; only stages 5 and 6 depend on the provider.</figcaption>
+  </figure>
+
+  <h2>3.2 Live follow-up loop</h2>
+  <p>This is what lets Claude ask further questions of the systems. The SDK tool runner drives the loop, but every call passes through ResolveAI's callback, which records it and enforces the limit. The model can't exceed it, because past the limit it only receives a refusal.</p>
+  <figure>
+    <svg viewBox="0 0 680 318" role="img" aria-label="Follow-up sequence diagram">
+      <rect x="10" y="4" width="130" height="30" rx="4" class="bx"/><text x="75" y="23" text-anchor="middle" class="t">Investigations</text>
+      <rect x="185" y="4" width="130" height="30" rx="4" class="bx"/><text x="250" y="23" text-anchor="middle" class="t">ClaudeProvider</text>
+      <rect x="360" y="4" width="130" height="30" rx="4" class="bn"/><text x="425" y="23" text-anchor="middle" class="t">Claude API</text>
+      <rect x="535" y="4" width="135" height="30" rx="4" class="bx"/><text x="602" y="23" text-anchor="middle" class="t">Hub, MCP server</text>
+      <path d="M75 34V312M250 34V312M425 34V312M602 34V312" class="ln"/>
+      <path d="M75 56H248" class="l"/><text x="160" y="50" text-anchor="middle" class="s">packet, read-only tools, limit</text>
+      <path d="M250 80H423" class="l"/><text x="337" y="74" text-anchor="middle" class="s">request (effort low, 4,000 tokens)</text>
+      <path d="M425 104H252" class="l"/><text x="337" y="98" text-anchor="middle" class="s">tool_use: files_tail</text>
+      <path d="M250 128H77" class="l"/><text x="160" y="122" text-anchor="middle" class="s">callback(name, args)</text>
+      <path d="M75 152H600" class="l"/><text x="340" y="146" text-anchor="middle" class="s">if under the limit: call the tool (15 s limit), record it, add to packet</text>
+      <path d="M602 176H77" class="l"/><text x="340" y="170" text-anchor="middle" class="s">result rows and summary</text>
+      <path d="M75 200H248" class="l"/><text x="160" y="194" text-anchor="middle" class="s">"[mcp:9] redacted excerpt"</text>
+      <path d="M250 224H423" class="l"/><text x="337" y="218" text-anchor="middle" class="s">tool_result, with the full history resent</text>
+      <rect x="20" y="238" width="640" height="24" rx="3" class="ba"/><text x="340" y="254" text-anchor="middle" class="s">Past the limit: the callback returns "Limit reached", makes no call. The runner also stops at limit + 1 turns.</text>
+      <path d="M425 284H252" class="l"/><text x="337" y="278" text-anchor="middle" class="s">one-sentence closing reply</text>
+      <path d="M250 306H77" class="l"/><text x="160" y="300" text-anchor="middle" class="s">token usage for the trace</text>
+    </svg>
+    <figcaption>Figure 4. Follow-up sequence. Tested against a fake API. It has not yet run against the real Claude API.</figcaption>
+  </figure>
+
+  <h2>3.3 Engineer review, through to the RCA</h2>
+  <figure>
+    <svg viewBox="0 0 680 190" role="img" aria-label="Review workflow">
+      <rect x="4" y="10" width="118" height="54" rx="5" class="bx"/><text x="63" y="33" text-anchor="middle" class="t">Read findings</text><text x="63" y="48" text-anchor="middle" class="s">facts vs inference</text>
+      <rect x="140" y="10" width="118" height="54" rx="5" class="bx"/><text x="199" y="33" text-anchor="middle" class="t">Open evidence</text><text x="199" y="48" text-anchor="middle" class="s">jump to source record</text>
+      <rect x="276" y="10" width="118" height="54" rx="5" class="bn"/><text x="335" y="33" text-anchor="middle" class="t">Perform checks</text><text x="335" y="48" text-anchor="middle" class="s">by hand, outside the app</text>
+      <rect x="412" y="10" width="118" height="54" rx="5" class="bx"/><text x="471" y="33" text-anchor="middle" class="t">Record the cause</text><text x="471" y="48" text-anchor="middle" class="s">votes, notes, verified</text>
+      <rect x="548" y="10" width="128" height="54" rx="5" class="bx"/><text x="612" y="33" text-anchor="middle" class="t">Generate RCA</text><text x="612" y="48" text-anchor="middle" class="s">uses cause and notes</text>
+      <rect x="412" y="112" width="118" height="54" rx="5" class="bx"/><text x="471" y="135" text-anchor="middle" class="t">Mark reviewed</text><text x="471" y="150" text-anchor="middle" class="s">incident is verified</text>
+      <rect x="548" y="112" width="128" height="54" rx="5" class="bx"/><text x="612" y="135" text-anchor="middle" class="t">Edit the draft</text><text x="612" y="150" text-anchor="middle" class="s">check flagged numbers</text>
+      <rect x="276" y="112" width="118" height="54" rx="5" class="bg"/><text x="335" y="135" text-anchor="middle" class="t">Export</text><text x="335" y="150" text-anchor="middle" class="s">copy or download .md</text>
+      <path d="M122 37H138" class="l"/><path d="M258 37H274" class="l"/><path d="M394 37H410" class="l"/><path d="M530 37H546" class="l"/><path d="M612 64V110" class="l"/><path d="M548 139H532" class="l"/><path d="M412 139H396" class="l"/>
+      <text x="620" y="92" class="s">new version</text>
+    </svg>
+    <figcaption>Figure 5. Review workflow. Generating again creates a new version and never overwrites a person's edits.</figcaption>
+  </figure>
+
+  <h2>3.4 State lifecycles</h2>
+  <figure>
+    <svg viewBox="0 0 680 196" role="img" aria-label="State lifecycles">
+      <text x="4" y="14" class="z">INVESTIGATION STATUS</text>
+      <rect x="4" y="24" width="90" height="34" rx="17" class="bn"/><text x="49" y="45" text-anchor="middle" class="t">queued</text>
+      <rect x="150" y="24" width="90" height="34" rx="17" class="bx"/><text x="195" y="45" text-anchor="middle" class="t">running</text>
+      <rect x="320" y="4" width="100" height="34" rx="17" class="bg"/><text x="370" y="25" text-anchor="middle" class="t">completed</text>
+      <rect x="320" y="46" width="100" height="34" rx="17" class="bd"/><text x="370" y="67" text-anchor="middle" class="t">failed</text>
+      <path d="M94 41H148" class="l"/><path d="M240 36L318 22" class="l"/><path d="M240 46L318 62" class="l"/>
+      <text x="436" y="60" class="s">Also set at startup for any run</text><text x="436" y="73" class="s">interrupted by a restart.</text>
+      <text x="4" y="114" class="z">REVIEW STATE OF AN INCIDENT (computed by a query, not stored)</text>
+      <rect x="4" y="126" width="90" height="34" rx="17" class="bn"/><text x="49" y="147" text-anchor="middle" class="t">none</text>
+      <rect x="260" y="126" width="90" height="34" rx="17" class="ba"/><text x="305" y="147" text-anchor="middle" class="t">pending</text>
+      <rect x="516" y="126" width="90" height="34" rx="17" class="bg"/><text x="561" y="147" text-anchor="middle" class="t">verified</text>
+      <path d="M94 143H258" class="l"/><text x="176" y="137" text-anchor="middle" class="s">a run completes</text>
+      <path d="M350 143H514" class="l"/><text x="432" y="130" text-anchor="middle" class="s">verified cause recorded, and</text><text x="432" y="157" text-anchor="middle" class="s">latest RCA marked reviewed</text>
+      <text x="4" y="184" class="s">The UI labels these Not investigated, Needs review and Verified.</text>
+    </svg>
+    <figcaption>Figure 6. State lifecycles.</figcaption>
+  </figure>
+  <h2 style="break-before:page;margin-top:0">3.5 Time limits</h2>
+  <table>
+    <thead><tr><th>Operation</th><th style="width:16%">Limit</th><th>On expiry</th></tr></thead>
+    <tbody>
+      <tr><td>Analysis stage, and RCA draft</td><td>180 s each</td><td>Run fails, or RCA request errors, with a readable message</td></tr>
+      <tr><td>Follow-up stage</td><td>120 s</td><td>Noted under validation; analysis continues</td></tr>
+      <tr><td>One Claude HTTP request</td><td>90 s, 2 retries</td><td>Mapped to a readable error</td></tr>
+      <tr><td>MCP server startup</td><td>20 s</td><td>System shows <i>Not working</i>; the app still starts</td></tr>
+      <tr><td>One tool call at the hub / inside the server</td><td>15 s / 10 s</td><td>Failed result recorded; the run continues</td></tr>
+      <tr><td>Git command; SQL connect and command</td><td>8 s; 5 s and 8 s</td><td>Tool returns an error result; git is killed</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="chapter parta" id="s4">
+  <h1>4. Components</h1>
+  <h2>4.1 Evidence gathering</h2>
+  <p><code>Pipeline/EvidenceLoader.cs</code> is deterministic and involves no model. For one incident it loads:</p>
+  <ul>
+    <li><b>Logs:</b> the affected service, or linked to the incident, from 30 minutes before the start to one hour after detection, up to 200 rows.</li>
+    <li><b>Deployments:</b> the same service in the 48 hours before, and other services within one hour either side.</li>
+    <li><b>Also:</b> metric snapshots, timeline events, and up to five runbooks or guides, plus error signals counted from the logs by signature.</li>
+  </ul>
+  <h2>4.2 Similar incidents</h2>
+  <p><code>Pipeline/Similar.cs</code> builds search terms from the title, description, error signatures and same-service change summaries, then runs an FTS5 query. The model never chooses candidates; it can only explain them.</p>
+<pre>score = -bm25 x 10 + matched terms + (3 if same service)
+keep   candidates with at least 2 matched terms, and at least 35% of the best score, up to 5</pre>
+  <h2>4.3 Evidence packet</h2>
+  <p><code>Pipeline/Packet.cs</code> builds the only thing the model is allowed to see. Each item has a typed ID that the validator later checks citations against.</p>
+  <table>
+    <thead><tr><th style="width:22%">Prefix</th><th>Source</th><th style="width:22%">Prefix</th><th>Source</th></tr></thead>
+    <tbody>
+      <tr><td><code>log:</code></td><td>Log group</td><td><code>doc:</code></td><td>Runbook or guide</td></tr>
+      <tr><td><code>dep:</code></td><td>Deployment</td><td><code>hist:</code></td><td>Past incident</td></tr>
+      <tr><td><code>met:</code></td><td>Metric snapshot</td><td><code>tl:</code></td><td>Timeline event</td></tr>
+      <tr><td><code>mcp:N</code></td><td>System check result</td><td></td><td></td></tr>
+    </tbody>
+  </table>
+  <ul>
+    <li><b>Deduplication:</b> log lines differing only by IDs or numbers collapse into one group with a count.</li>
+    <li><b>Bounds:</b> 40 log groups, preferring errors and warnings; excerpts of 600 characters, or 1,200 for tool results; 40,000 characters in total, dropping information logs first.</li>
+    <li><b>Ordering:</b> by time, with tool results last in call order.</li>
+  </ul>
+  <h2>4.4 Redaction</h2>
+  <p><code>Pipeline/Sanitizer.cs</code> runs when the packet is built. Stored logs and tool rows aren't changed, so an engineer still sees the raw record, and a database trigger rejects any update to log rows. It redacts URL credentials, <code>Bearer</code> and <code>Basic</code> values, provider-style keys (<code>sk_</code>, <code>sk-ant-</code>, <code>AKIA</code>, <code>ghp_</code>), <code>key=value</code> secrets, email addresses and card-like numbers.</p>
+  <div class="note warn"><b>Limitation:</b> these are patterns. A secret in an unusual format can pass through, which matters most once real data is sent to a cloud model.</div>
+  <h2>4.5 Validation</h2>
+  <p><code>Pipeline/Validate.cs</code> enforces what a JSON schema can't express, because model output is treated as untrusted.</p>
+  <table>
+    <thead><tr><th style="width:27%">Check</th><th>Behaviour</th></tr></thead>
+    <tbody>
+      <tr><td>Citations</td><td>Any ID not in the packet is removed and noted. A hypothesis left with none is marked <b>speculative</b> and forced to low confidence.</td></tr>
+      <tr><td>Unsafe checks</td><td>Recommended checks describing destructive actions (<code>rm -rf</code>, <code>kubectl delete</code>, <code>DROP TABLE</code>, <code>terraform destroy</code> and similar) are removed.</td></tr>
+      <tr><td>Invented numbers</td><td>Numbers with a unit, or of 10 or more, that don't appear in the evidence are flagged, not deleted, so a person decides.</td></tr>
+      <tr><td>Similar incidents</td><td>Explanations for anything outside the retrieved candidates are ignored.</td></tr>
+      <tr><td>Bounds</td><td>5 hypotheses, 8 list items, 5 checks, and clipped text lengths.</td></tr>
+      <tr><td>Ranking</td><td><code>2 x confidence (1, 2 or 3) + min(citations, 5) - counter-evidence</code>. For ordering only; never shown as a probability.</td></tr>
+    </tbody>
+  </table>
+  <h2>4.6 LLM providers</h2>
+  <div class="grid2">
+    <div class="card"><h3>RecordedProvider (default)</h3>
+      <p>No network. INC-1042, INC-1045 and INC-1046 replay written analyses, which adapt to the checks that actually ran. Other incidents get a rule-based analysis built from the packet. Output goes through the same validation as live output.</p></div>
+    <div class="card"><h3>ClaudeProvider (live)</h3>
+      <p>Analysis: effort medium, 16,000 tokens, structured output, <code>fallbacks: "default"</code>. Follow-ups: effort low, 4,000 tokens, through the tool runner. Replies are also checked for shape and valid confidence values before use. Refusals, cut-offs and API errors become readable messages.</p></div>
+  </div>
+  <h2 style="margin-top:12pt">4.7 MCP hub</h2>
+  <p><code>Mcp/Hub.cs</code> starts each enabled server, keeps only tools marked <code>readOnlyHint</code>, routes calls, and restarts a crashed server once. A system that fails to start shows as <i>Not working</i> and never stops the app. <code>Mcp/Baseline.cs</code> decides the fixed checks for each incident from <code>mcp.config.json</code>: database checks if the service has a database, error and warning searches of its log folders, recent deployments and its key metrics.</p>
+</section>
+
+<section class="chapter parta" id="s5">
+  <h1>5. MCP servers</h1>
+  <p>All four servers live in one executable, <code>src/ResolveAI.Mcp</code>, selected by an argument. Each uses <code>ToolServer</code>, which applies declared-input checks, a timeout, the read-only annotations and consistent error results to every tool.</p>
+  <h2>5.1 Tools</h2>
+  <table>
+    <thead><tr><th style="width:17%">System</th><th style="width:30%">Tool</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td rowspan="7"><b>Database</b><br>SQL Server</td><td><code>db_health</code></td><td>Sessions and blocked requests per database, top waits, memory and CPU</td></tr>
+      <tr><td><code>db_blocking</code></td><td>Blocking chains, head blocker and its last statement</td></tr>
+      <tr><td><code>db_long_queries</code></td><td>Requests running at least <i>n</i> seconds</td></tr>
+      <tr><td><code>db_deadlocks</code></td><td>Deadlocks from the system_health session</td></tr>
+      <tr><td><code>db_errors</code></td><td>Errors from system_health and the optional resolveai_errors session</td></tr>
+      <tr><td><code>db_space</code></td><td>File sizes, state and log reuse for an allow-listed database</td></tr>
+      <tr><td><code>db_failed_jobs</code></td><td>Failed SQL Agent job steps</td></tr>
+      <tr><td rowspan="5"><b>Files &amp; logs</b></td><td><code>files_search</code></td><td>Plain-text search, optionally within a time window</td></tr>
+      <tr><td><code>files_tail</code></td><td>Last lines of a text file</td></tr>
+      <tr><td><code>files_recent_changes</code></td><td>Files modified since a time</td></tr>
+      <tr><td><code>files_disk_space</code></td><td>Free and used space on the drive</td></tr>
+      <tr><td><code>files_check</code></td><td>Exists, size, modified time, readable, writable</td></tr>
+      <tr><td rowspan="2"><b>Deploys &amp; Git</b></td><td><code>deploys_recent</code></td><td>Feed deployments and git commits in a window</td></tr>
+      <tr><td><code>deploys_change_summary</code></td><td>Files changed and a short patch</td></tr>
+      <tr><td rowspan="3"><b>Metrics &amp; host</b></td><td><code>metrics_list</code></td><td>Metric names for a service</td></tr>
+      <tr><td><code>metrics_series</code></td><td>Baseline, peak and timing in a window</td></tr>
+      <tr><td><code>metrics_host</code></td><td>Current CPU, memory and uptime</td></tr>
+    </tbody>
+  </table>
+  <h2>5.2 Limits on every tool</h2>
+  <p>10-second timeout, 24-hour time window, 200 rows, 64,000 characters of output (trailing rows are dropped to fit, and marked truncated), and 500 characters per value.</p>
+  <h2 style="break-before:page;margin-top:0">5.3 Read-only guarantees</h2>
+  <table>
+    <thead><tr><th style="width:15%">System</th><th style="width:43%">Guarantee</th><th>How</th></tr></thead>
+    <tbody>
+      <tr><td><b>All</b></td><td>No arbitrary commands or SQL</td><td>Fixed tools only. The hub also ignores any tool not marked read-only.</td></tr>
+      <tr><td><b>SQL</b></td><td>The server itself refuses writes, even for an admin connection</td><td>Each statement runs inside <code>EXECUTE AS LOGIN = 'resolveai_reader'</code> and always reverts. That login has <code>VIEW SERVER STATE</code>, <code>db_datareader</code> on the demo database, and read access to job history.</td></tr>
+      <tr><td></td><td>Nothing a caller sends becomes SQL</td><td>Fixed text and typed parameters. The one exception is a database name, matched against an allow-list and bracket-quoted.</td></tr>
+      <tr><td><b>Files</b></td><td>Only inside allowed folders</td><td>The real path of every segment is resolved, so <code>..</code>, symlinks, junctions, sibling folders with the same prefix, device paths and alternate data streams are refused.</td></tr>
+      <tr><td></td><td>Can't be used to read huge or binary files</td><td>Walks skip links and stop at 500 files. Files over 20 MB and binary files are skipped; tail reads at most 1 MB.</td></tr>
+      <tr><td><b>Git</b></td><td>No injection</td><td>No shell, fixed arguments, repositories only from config, commit must be 4 to 40 hex characters, 8-second kill, 4 MB output cap.</td></tr>
+      <tr><td><b>Metrics</b></td><td>A name can't become a path</td><td>Service names must be plain alphanumeric names with hyphens.</td></tr>
+    </tbody>
+  </table>
+  <h2>5.4 Adding a system</h2>
+  <ol>
+    <li>Add <code>&lt;Name&gt;Server.cs</code> in <code>src/ResolveAI.Mcp</code> that returns a <code>ToolServer</code>.</li>
+    <li>Register it in <code>ServerDefs</code> in <code>Program.cs</code>.</li>
+    <li>Add its colour to <code>SystemStyle</code> in <code>Components/Shared/Ui.cs</code>.</li>
+    <li>Add its checks to <code>Mcp/Baseline.cs</code>.</li>
+    <li>Add attack tests for anything a caller controls.</li>
+  </ol>
+</section>
+
+<section class="chapter parta" id="s6">
+  <h1>6. Data model and API</h1>
+  <h2>6.1 Data model</h2>
+  <p>There are 14 tables, two FTS5 search tables and a <code>_migrations</code> table. IDs are UUID strings, and seeded IDs are derived from stable names, so recorded analyses can cite them and resets produce identical data.</p>
+  <figure>
+    <svg viewBox="0 0 680 372" role="img" aria-label="Entity relationship diagram">
+      <rect x="250" y="6" width="180" height="62" rx="4" class="bx"/><text x="340" y="26" text-anchor="middle" class="t">incidents</text><text x="340" y="42" text-anchor="middle" class="s">key, service_name, severity,</text><text x="340" y="55" text-anchor="middle" class="s">status, started_at, detected_at</text>
+      <rect x="4" y="6" width="150" height="34" rx="4" class="bg"/><text x="79" y="27" text-anchor="middle" class="t">log_events (immutable)</text>
+      <rect x="4" y="46" width="150" height="26" rx="4" class="bg"/><text x="79" y="63" text-anchor="middle" class="t">metric_snapshots</text>
+      <rect x="4" y="78" width="150" height="26" rx="4" class="bg"/><text x="79" y="95" text-anchor="middle" class="t">timeline_events</text>
+      <rect x="526" y="6" width="150" height="26" rx="4" class="bg"/><text x="601" y="23" text-anchor="middle" class="t">deployments</text>
+      <rect x="526" y="38" width="150" height="26" rx="4" class="bg"/><text x="601" y="55" text-anchor="middle" class="t">knowledge_documents</text>
+      <rect x="526" y="70" width="150" height="26" rx="4" class="bg"/><text x="601" y="87" text-anchor="middle" class="t">historical_incidents</text>
+      <path d="M250 24H156" class="l"/><path d="M250 44L156 58" class="l"/><path d="M250 58L156 90" class="l"/>
+      <path d="M430 20H524" class="l"/>
+      
+      <rect x="230" y="118" width="220" height="74" rx="4" class="bx"/><text x="340" y="138" text-anchor="middle" class="t">investigations</text><text x="340" y="154" text-anchor="middle" class="s">status, stage, llm_mode, evidence_packet,</text><text x="340" y="167" text-anchor="middle" class="s">summary, limitations, validation_issues,</text><text x="340" y="180" text-anchor="middle" class="s">trace, usage</text>
+      <path d="M340 68V116" class="l"/>
+      <rect x="4" y="226" width="160" height="62" rx="4" class="bx"/><text x="84" y="246" text-anchor="middle" class="t">hypotheses</text><text x="84" y="262" text-anchor="middle" class="s">rank, confidence, score,</text><text x="84" y="275" text-anchor="middle" class="s">speculative, checks</text>
+      <rect x="176" y="226" width="120" height="62" rx="4" class="bx"/><text x="236" y="246" text-anchor="middle" class="t">tool_calls</text><text x="236" y="262" text-anchor="middle" class="s">seq (mcp:N), phase,</text><text x="236" y="275" text-anchor="middle" class="s">tool, args, rows</text>
+      <rect x="308" y="226" width="110" height="62" rx="4" class="bx"/><text x="363" y="246" text-anchor="middle" class="t">feedback</text><text x="363" y="262" text-anchor="middle" class="s">helpful, comment,</text><text x="363" y="275" text-anchor="middle" class="s">verified_root_cause</text>
+      <rect x="430" y="226" width="110" height="62" rx="4" class="bx"/><text x="485" y="246" text-anchor="middle" class="t">rca_drafts</text><text x="485" y="262" text-anchor="middle" class="s">version, status,</text><text x="485" y="275" text-anchor="middle" class="s">impact, root_cause</text>
+      <rect x="552" y="226" width="124" height="62" rx="4" class="bx"/><text x="614" y="243" text-anchor="middle" class="t">investigation_</text><text x="614" y="257" text-anchor="middle" class="t">similar_incidents</text><text x="614" y="273" text-anchor="middle" class="s">score, reason</text>
+      <path d="M270 192L84 224" class="l"/><path d="M300 192L236 224" class="l"/><path d="M350 192L363 224" class="l"/><path d="M400 192L485 224" class="l"/><path d="M450 170L614 224" class="l"/>
+      <path d="M601 96C660 130 650 190 625 224" class="l"/>
+      <rect x="4" y="314" width="160" height="30" rx="4" class="bx"/><text x="84" y="333" text-anchor="middle" class="t">evidence_links</text>
+      <path d="M84 288V312" class="l"/>
+      <rect x="230" y="314" width="310" height="30" rx="4" class="bn"/><text x="385" y="333" text-anchor="middle" class="s">Search tables: knowledge_fts, historical_fts (FTS5). Also _migrations.</text>
+      <text x="4" y="364" class="s">Green: evidence and history. Purple: results. Also: knowledge_documents to historical_incidents, incidents to rca_drafts, hypotheses to feedback.</text>
+    </svg>
+    <figcaption>Figure 7. Main tables and relationships. Arrows point from a parent to the rows that depend on it.</figcaption>
+  </figure>
+  <p><b>JSON columns:</b> lists and structured values are stored as JSON text, such as <code>evidence_packet</code>, <code>trace</code>, <code>limitations</code>, <code>recommended_checks</code> and <code>rows</code>. The stored packet is the permanent record of exactly what the model saw.</p>
+  <p><b>Migrations:</b> SQL files embedded in the app and applied in filename order, each in a transaction, and recorded by filename.</p>
+  <h2>6.2 HTTP API</h2>
+  <p>JSON uses snake_case. Errors are <code>{ "error": "message" }</code>. <code>:id</code> on incidents accepts a UUID or a key such as <code>INC-1042</code>.</p>
+  <table>
+    <thead><tr><th style="width:43%">Route</th><th>Purpose and notable statuses</th></tr></thead>
+    <tbody>
+      <tr><td><code>GET /api/config</code></td><td>Mode, live availability, usage today, follow-up limit</td></tr>
+      <tr><td><code>GET /api/systems</code></td><td>Status, detail and tools for each MCP system</td></tr>
+      <tr><td><code>GET /api/incidents</code></td><td>List and filter: <code>status, severity, service, q, review, page, page_size</code></td></tr>
+      <tr><td><code>GET /api/incidents/:id</code></td><td>Detail, latest run, all runs, RCA versions. 404 if unknown</td></tr>
+      <tr><td><code>GET /api/incidents/:id/evidence</code></td><td>Logs, signals, deployments, metrics, timeline, runbooks</td></tr>
+      <tr><td><code>POST /api/incidents/:id/investigations</code></td><td><code>{question?, mode?}</code>. 202 started; 400 bad input or live not set up; 403 wrong code; 429 over the daily limit</td></tr>
+      <tr><td><code>GET /api/investigations/:id</code></td><td>Status, stage, hypotheses with evidence, trace, tool calls</td></tr>
+      <tr><td><code>POST /api/investigations/:id/feedback</code></td><td><code>{hypothesis_id?, helpful?, comment?, verified_root_cause?}</code>. 201</td></tr>
+      <tr><td><code>POST /api/incidents/:id/rca-drafts</code></td><td><code>{investigation_id}</code>. 201; 400 wrong incident; 409 not completed; 502 model error</td></tr>
+      <tr><td><code>GET</code>, <code>PATCH /api/rca-drafts/:id</code></td><td>Read or save edits; only listed fields can change</td></tr>
+      <tr><td><code>GET /api/rca-drafts/:id/export.md</code></td><td>Markdown download</td></tr>
+      <tr><td><code>GET /api/knowledge/:id</code></td><td>Runbook or historical RCA document</td></tr>
+      <tr><td><code>POST /api/demo/reset</code></td><td>Reseed. 403 unless localhost or access code; 404 if demo mode is off; 409 while a run is active</td></tr>
+    </tbody>
+  </table>
+  <h2>6.3 UI pages</h2>
+  <table>
+    <thead><tr><th style="width:27%">Route</th><th>Content</th></tr></thead>
+    <tbody>
+      <tr><td><code>/</code></td><td>Incident queue with filters and the Needs review toggle</td></tr>
+      <tr><td><code>/incidents/{id}</code></td><td>Header, run controls and tabs: signals and timeline, logs, deployments, AI findings, system checks, similar incidents, RCA</td></tr>
+      <tr><td><code>/systems</code></td><td>Status and tools of each system, and how investigations use them</td></tr>
+      <tr><td><code>/settings</code></td><td>Mode, access code, demo reset</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="chapter parta" id="s7">
+  <h1>7. Design decisions</h1>
+  <p>Each record gives the decision, the reasoning, what was rejected, and what it costs.</p>
+  <h3>D1. Code gathers evidence; the model only reasons over it</h3>
+  <p><b>Why:</b> a model that searches freely can miss evidence or be steered by injected text, and its results are hard to audit. <b>Rejected:</b> a fully agentic investigation. <b>Cost:</b> baseline checks are fixed, so unusual incidents depend on follow-ups.</p>
+  <h3>D2. One read-only MCP server per system, with fixed tools</h3>
+  <p><b>Why:</b> a separate process per system gives a clear boundary, independent failure and reuse from other MCP clients, and safety that doesn't depend on model behaviour. <b>Rejected:</b> a generic "run SQL" or "run command" tool, which would be more flexible but unsafe. <b>Cost:</b> each new question needs a new tool.</p>
+  <h3>D3. Enforce read-only in the target system too</h3>
+  <p><b>Why:</b> running queries as <code>resolveai_reader</code> means SQL Server refuses writes even if the code has a bug or connects as an admin. <b>Cost:</b> setup needs an administrator once, and the login needs specific grants.</p>
+  <h3>D4. Validate model output on the server</h3>
+  <p><b>Why:</b> structured output guarantees shape, not truth. <b>Rejected:</b> trusting citations, or deleting flagged text outright; flagged numbers are kept so a person decides. <b>Cost:</b> permissive matching means a number appearing anywhere in the evidence counts as verified.</p>
+  <h3>D5. Similar incidents are retrieved by code</h3>
+  <p><b>Why:</b> deterministic and testable, and the model can't invent a precedent. <b>Rejected:</b> vector search, which adds infrastructure not justified at this scale. <b>Cost:</b> keyword search misses matches phrased differently.</p>
+  <h3>D6. Recorded mode as the default</h3>
+  <p><b>Why:</b> demos and tests behave the same every time, with no cost or network. <b>Cost:</b> it can look more finished than it is: recorded analyses were written by hand and prove the pipeline, not the model's judgement.</p>
+  <h3>D7. Blazor Server, with the UI and API sharing AppService</h3>
+  <p><b>Why:</b> one language and no client-side secrets, and rules that sat in route handlers moved to one place so the UI can't bypass them. <b>Rejected:</b> a Blazor UI calling the API over HTTP, which adds a hop in the same process. <b>Cost:</b> each user holds a live server connection, so scaling out would need sticky sessions.</p>
+  <h3>D8. Port from Node against recorded golden files</h3>
+  <p><b>Why:</b> the highest risk was silent change, such as weakened redaction or different scoring. Recording every route, investigation, prompt and tool result first made differences into test failures. <b>Cost:</b> intentional behaviour changes now require updating the golden files.</p>
+  <h3>D9. Pin the MCP protocol version</h3>
+  <p><b>Why:</b> an unpinned client probes for a newer version on a short timeout, then falls back to a handshake that a slow-starting server refuses. That made systems randomly fail on a busy machine, in about 40% of parallel test runs. ResolveAI ships both ends, so nothing needs negotiating. <b>Cost:</b> newer protocol features need a deliberate change.</p>
+  <h3>D10. SQLite</h3>
+  <p><b>Why:</b> anyone can run the project from the README with no database setup, and FTS5 is enough at this scale. <b>Cost:</b> limited to one server; Part B replaces it.</p>
+  <h3>D11. Store evidence as JSON on the investigation</h3>
+  <p><b>Why:</b> an investigation stays reproducible and auditable even after source data changes. <b>Cost:</b> large rows, and queries can't easily reach inside them.</p>
+</section>
+
+<section class="chapter parta" id="s8">
+  <h1>8. Security and threat model</h1>
+  <h2>8.1 Assets and trust boundaries</h2>
+  <p>The main assets are incident evidence (which can contain secrets and personal data), credentials (API key, SQL login, access code), the integrity of monitored systems, and the paid API budget.</p>
+  <figure>
+    <svg viewBox="0 0 680 226" style="max-width:86%" role="img" aria-label="Trust boundaries">
+      <rect x="4" y="30" width="118" height="130" rx="6" class="zone"/><text x="12" y="45" class="z">Browser</text>
+      <rect x="16" y="66" width="94" height="56" rx="4" class="bn"/><text x="63" y="90" text-anchor="middle" class="t">Engineer</text><text x="63" y="105" text-anchor="middle" class="s">untrusted input</text>
+      <rect x="160" y="10" width="280" height="150" rx="6" class="zone"/><text x="168" y="25" class="z">App process: holds API key and access code</text>
+      <rect x="172" y="36" width="256" height="30" rx="4" class="bx"/><text x="300" y="56" text-anchor="middle" class="t">AppService: access, limits, ownership</text>
+      <rect x="172" y="74" width="122" height="74" rx="4" class="bx"/><text x="233" y="98" text-anchor="middle" class="t">Redaction</text><text x="233" y="113" text-anchor="middle" class="s">before the model</text><text x="233" y="126" text-anchor="middle" class="s">sees anything</text>
+      <rect x="306" y="74" width="122" height="74" rx="4" class="bx"/><text x="367" y="98" text-anchor="middle" class="t">Validation</text><text x="367" y="113" text-anchor="middle" class="s">of everything the</text><text x="367" y="126" text-anchor="middle" class="s">model returns</text>
+      <rect x="478" y="10" width="198" height="62" rx="6" class="bn"/><text x="577" y="36" text-anchor="middle" class="t">Claude API</text><text x="577" y="52" text-anchor="middle" class="s">output is untrusted</text>
+      <rect x="478" y="90" width="198" height="70" rx="6" class="zone"/><text x="486" y="105" class="z">MCP child processes</text><text x="577" y="125" text-anchor="middle" class="s">no secrets beyond a SQL login;</text><text x="577" y="139" text-anchor="middle" class="s">output treated as untrusted data</text>
+      <rect x="160" y="182" width="516" height="36" rx="5" class="bn"/><text x="418" y="204" text-anchor="middle" class="t">Monitored systems: logs and data may contain hostile text</text>
+      <path d="M110 94H170" class="l"/><path d="M428 41H476" class="l"/><path d="M476 60H430" class="l"/><path d="M430 125H476" class="l"/><path d="M577 160V180" class="l"/>
+    </svg>
+    <figcaption>Figure 8. Trust boundaries. Everything arriving from the browser, the model or a monitored system is treated as untrusted.</figcaption>
+  </figure>
+  <h2>8.2 Threats and mitigations</h2>
+  <table>
+    <thead><tr><th style="width:27%">Threat</th><th>Mitigation</th><th style="width:15%">Tested by</th></tr></thead>
+    <tbody>
+      <tr><td><b>Prompt injection</b> in logs or tool results</td><td>The prompt marks evidence as data. Tools are read-only, so a successful injection can't change a system. Citations and unsafe checks are validated; a person reviews everything.</td><td>API tests</td></tr>
+      <tr><td><b>Secrets sent to the model</b></td><td>Redaction when the packet is built, including tool output. Pattern-based, so not complete.</td><td>Unit, golden</td></tr>
+      <tr><td><b>Destructive advice or invented facts</b></td><td>Unsafe recommended checks are stripped, and nothing is executed. Unknown citations are removed; unverified numbers are flagged.</td><td>Unit, API</td></tr>
+      <tr><td><b>Reading files outside the allowed folders</b></td><td>Real-path confinement in every segment.</td><td>Attack tests</td></tr>
+      <tr><td><b>Argument or SQL injection</b></td><td>No shell, hex-only commits, fixed SQL, allow-listed database names, a validated login name.</td><td>Attack tests</td></tr>
+      <tr><td><b>Writing to monitored systems</b></td><td>No write tools, and the reader login enforces it in SQL Server.</td><td>Real SQL test</td></tr>
+      <tr><td><b>API key reaching child processes</b></td><td>Environment inheritance is off, with an explicit allow-list.</td><td>Real child process</td></tr>
+      <tr><td><b>Runaway cost</b></td><td>Access code, daily limit (default 20 model calls), call limit per run. The limit is enforced by ResolveAI, not the model.</td><td>API tests</td></tr>
+      <tr><td><b>HTML or script in logs</b></td><td>Blazor encodes all text; raw markup rendering isn't used.</td><td>Browser test</td></tr>
+      <tr><td><b>Another site connecting to the Blazor circuit</b></td><td>Origin check on <code>/_blazor</code>.</td><td>Browser test</td></tr>
+      <tr><td><b>Access code exposure</b></td><td>Compared in constant time on hashes, and encrypted in the browser's storage.</td><td>Browser test</td></tr>
+    </tbody>
+  </table>
+  <h2>8.3 Known gaps</h2>
+  <div class="note warn">
+    <ul style="margin-bottom:0">
+      <li><b>No user accounts.</b> Safety relies on binding to localhost. Anyone reaching the port can read everything and run recorded investigations.</li>
+      <li><b>No cross-site protection on the HTTP API.</b> A web page you visit could send a request to it on localhost, including <code>POST /api/demo/reset</code>, which erases investigations. Set <code>DEMO_MODE=false</code> where that matters.</li>
+      <li><b>No DNS-rebinding protection.</b> The Origin check compares against the Host header, and allowed hosts aren't restricted.</li>
+      <li><b>Pattern-based redaction</b> can miss secrets. Raw rows are shown to anyone using the app, by design.</li>
+      <li><b>No audit log of who did what,</b> because there are no identities.</li>
+    </ul>
+  </div>
+</section>
+
+<section class="chapter parta" id="s9">
+  <h1>9. Deployment and operations</h1>
+  <h2>9.1 Local</h2>
+<pre>dotnet run --project src/ResolveAI.App      # http://localhost:8787</pre>
+  <p>Requires the .NET 10 SDK. An empty database is seeded on first start. Settings come from <code>.env</code> if present, and real environment variables win over the file.</p>
+  <h2>9.2 Container</h2>
+<pre>cp .env.example .env              # optional, for live runs
+docker compose up -d --build
+docker compose ps                 # wait for "healthy"</pre>
+  <ul>
+    <li><b>Image:</b> published app on <code>dotnet/aspnet:10.0</code>, non-root, no Node. The app is its own health check (<code>--healthcheck</code>), since the image has no curl.</li>
+    <li><b>Network:</b> published on <code>127.0.0.1</code> only. Compose sets <code>DEMO_RESET_ANY_IP=true</code>, because callers arrive from the bridge network; this is safe only with that loopback binding.</li>
+    <li><b>Data:</b> SQLite on the named volume <code>resolveai-data</code>.</li>
+    <li><b>SQL Server from Docker:</b> use the <code>tedious</code> driver setting with a SQL login, as Windows sign-in isn't available.</li>
+  </ul>
+  <h2>9.3 Configuring systems</h2>
+  <p><code>mcp.config.json</code>, or the committed example if it's absent, maps each service to log folders, a git repository, a database and key metrics, and sets allowed folders. Relative paths resolve against the file's folder. Secrets stay in <code>.env</code>.</p>
+<pre>sqlcmd -S localhost -E -C -i demo-systems/sqlserver/setup.sql
+# then: "sqlserver": { "enabled": true, "driver": "msnodesqlv8", "execute_as": "resolveai_reader" }</pre>
+  <p>Both driver names now use <code>Microsoft.Data.SqlClient</code>; they are kept so that existing config files stay valid.</p>
+  <h2>9.4 Operations</h2>
+  <table>
+    <thead><tr><th style="width:27%">Task</th><th>How</th></tr></thead>
+    <tbody>
+      <tr><td>Check health</td><td><code>GET /api/config</code>; the Systems page shows each system's status</td></tr>
+      <tr><td>Back up</td><td>Copy <code>data/</code> while stopped, or <code>docker compose cp resolveai:/app/data ./backup</code></td></tr>
+      <tr><td>Reset demo data</td><td>Settings page. This erases investigations, feedback and RCA drafts</td></tr>
+      <tr><td>Upgrade</td><td><code>docker compose up -d --build</code>. Migrations apply at startup</td></tr>
+      <tr><td>After a restart</td><td>Runs in progress are marked failed; run them again</td></tr>
+    </tbody>
+  </table>
+  <h2>9.5 Troubleshooting</h2>
+  <table>
+    <thead><tr><th style="width:38%">Symptom</th><th>Likely cause</th></tr></thead>
+    <tbody>
+      <tr><td>A system shows <i>Not working</i></td><td>Read its detail on the Systems page. For SQL Server, the service may be stopped or <code>setup.sql</code> not run.</td></tr>
+      <tr><td>Blank page in a published build</td><td>Content root or client script missing. Publish with source present, so restore sees the <code>.razor</code> files.</td></tr>
+      <tr><td>Live option not offered</td><td>Needs both <code>ANTHROPIC_API_KEY</code> and <code>LIVE_ACCESS_CODE</code>.</td></tr>
+      <tr><td>Access code forgotten after a rebuild</td><td>Expected: the keys protecting it live inside the container.</td></tr>
+      <tr><td>Port 8787 already in use</td><td>Another instance is running. Set <code>API_PORT</code> or stop it.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="chapter parta" id="s10">
+  <h1>10. Testing</h1>
+  <p>The suite has 205 test cases: 196 in <code>tests/ResolveAI.Tests</code> and 9 in <code>tests/ResolveAI.E2E</code>. The former also pass on Linux, inside the Docker build.</p>
+<pre>dotnet test tests/ResolveAI.Tests               # no external services needed
+MSSQL_TEST=1 dotnet test tests/ResolveAI.Tests  # also runs against local SQL Server
+dotnet test tests/ResolveAI.E2E                 # real browser, temporary database, free port
+docker build --target test .                    # the same tests on Linux</pre>
+  <h2>10.1 What each layer proves</h2>
+  <table>
+    <thead><tr><th style="width:24%">Layer</th><th>Covers</th><th style="width:29%">Doesn't prove</th></tr></thead>
+    <tbody>
+      <tr><td><b>Golden files</b></td><td>25 route responses, 7 investigation runs with packets and RCAs, 37 tool results, all tool schemas, the seed data, and the exact prompts and output schemas match the original implementation</td><td>That the original behaviour was right</td></tr>
+      <tr><td><b>API behaviour</b></td><td>Citations, retries, failures, access code, daily limit, review states, input limits</td><td>Real model quality</td></tr>
+      <tr><td><b>Attack tests</b></td><td>Path escapes through <code>..</code>, junctions, deeper segments, sibling folders, device paths and streams; non-hex commits; unsafe login names</td><td>Unknown attack forms</td></tr>
+      <tr><td><b>Real processes</b></td><td>Servers start as children; the API key and access code don't reach them</td><td></td></tr>
+      <tr><td><b>Real SQL Server</b> (opt-in)</td><td>Every <code>db_*</code> tool runs as the reader; writes are refused; login reverts</td><td>Behaviour under production load</td></tr>
+      <tr><td><b>Fake Claude API</b></td><td>Request contents, schema, fallback, tool loop, iteration limit, error mapping, using the real SDK</td><td><b>Whether the real API accepts and answers these requests well</b></td></tr>
+      <tr><td><b>Browser</b></td><td>The full journey, filters, HTML in logs staying inert, encrypted access code, phone layout, refused cross-site connections</td><td>Other browsers (Chromium only)</td></tr>
+    </tbody>
+  </table>
+  <h2>10.2 Golden files</h2>
+  <p><code>tests/ResolveAI.Tests/Golden</code> holds what the Node implementation returned. Comparisons normalise only what legitimately varies: random IDs, current times, file modified times and sizes, and durations. To change behaviour on purpose, update the golden file in the same change, and explain why in its review.</p>
+  <h2>10.3 Bugs this strategy found</h2>
+  <p>Each of these passed in-process tests and only failed under more realistic conditions, which is why several layers exist:</p>
+  <ul>
+    <li>All MCP servers crashed at launch from the app's folder (found by running the published app).</li>
+    <li>Blank page in the container, because restore ran before the source was copied (found by testing the image).</li>
+    <li>Random startup failures from MCP version negotiation (found by running projects in parallel).</li>
+    <li>The database code was never committed, because <code>.gitignore</code> matched it on Windows (found by testing a fresh clone).</li>
+  </ul>
+</section>
+
+<section class="chapter roadmap" id="s11">
+  <h1>11. Risks, limitations and gaps</h1>
+  <h2>11.1 Not proven</h2>
+  <table>
+    <thead><tr><th style="width:30%">Item</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td><b>Live Claude</b></td><td>Never run against the real API, in the Node or .NET versions. No API key is configured. The port's request format is tested, but not real answers, cost, latency or the quality of the checks Claude picks.</td></tr>
+      <tr><td><b>Recorded analyses</b></td><td>Written by hand. They prove the pipeline and UI, not the value of the analysis.</td></tr>
+      <tr><td><b>GitHub CI</b></td><td>The workflow hasn't run on GitHub. Its Docker checks and the unit tests were run locally on Linux; the C# browser tests ran only on Windows.</td></tr>
+      <tr><td><b>Accuracy</b></td><td>No evaluation set exists to measure how often the top hypothesis is right.</td></tr>
+    </tbody>
+  </table>
+  <h2>11.2 Limitations</h2>
+  <table>
+    <thead><tr><th style="width:27%">Area</th><th>Limitation</th><th style="width:15%">Addressed in</th></tr></thead>
+    <tbody>
+      <tr><td>Data</td><td>Synthetic incidents, logs, deploys and metrics. Only SQL Server checks can be real today, and file and git sources once pointed at real paths.</td><td>Phase 5, 6</td></tr>
+      <tr><td>Evidence timing</td><td>Time-windowed checks look at the incident window, but <code>db_blocking</code>, <code>db_health</code> and <code>db_long_queries</code> show the state right now, and a summary can link the two. That can mislead for an incident that has already ended.</td><td>Phase 1</td></tr>
+      <tr><td>Identity</td><td>No accounts, roles or audit trail.</td><td>Phase 2</td></tr>
+      <tr><td>Storage</td><td>SQLite: one server, and JSON columns are hard to query.</td><td>Phase 3</td></tr>
+      <tr><td>Availability</td><td>One process; a restart fails runs in progress.</td><td>Accepted</td></tr>
+      <tr><td>Retrieval</td><td>Keyword search only.</td><td>Not planned</td></tr>
+      <tr><td>Confidence</td><td>Qualitative and uncalibrated.</td><td>Phase 1</td></tr>
+      <tr><td>Documentation</td><td><code>docs/ResolveAI-Simple-Guide.pdf</code> still gives the old <code>npm</code> commands.</td><td>Phase 4</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="chapter roadmap" id="s12">
+  <h1>12. Roadmap</h1>
+  <p>The phases are ordered so that the riskiest assumption is tested first: if live analysis isn't useful, the rest isn't worth building. There are no dates or effort estimates, because those depend on team size. Each phase has an exit condition that can be checked.</p>
+  <figure>
+    <svg viewBox="0 0 680 92" role="img" aria-label="Roadmap phases">
+      <rect x="2" y="16" width="100" height="58" rx="5" class="bp"/><text x="52" y="38" text-anchor="middle" class="t">1. Prove</text><text x="52" y="53" text-anchor="middle" class="t">live Claude</text>
+      <rect x="116" y="16" width="100" height="58" rx="5" class="bp"/><text x="166" y="38" text-anchor="middle" class="t">2. Sign-in</text><text x="166" y="53" text-anchor="middle" class="t">and roles</text>
+      <rect x="230" y="16" width="100" height="58" rx="5" class="bp"/><text x="280" y="38" text-anchor="middle" class="t">3. SQL Server</text><text x="280" y="53" text-anchor="middle" class="t">migration</text>
+      <rect x="344" y="16" width="100" height="58" rx="5" class="bp"/><text x="394" y="38" text-anchor="middle" class="t">4. Windows</text><text x="394" y="53" text-anchor="middle" class="t">hosting, ops</text>
+      <rect x="458" y="16" width="100" height="58" rx="5" class="bp"/><text x="508" y="38" text-anchor="middle" class="t">5. Real</text><text x="508" y="53" text-anchor="middle" class="t">incident intake</text>
+      <rect x="572" y="16" width="106" height="58" rx="5" class="bp"/><text x="625" y="38" text-anchor="middle" class="t">6. More evidence</text><text x="625" y="53" text-anchor="middle" class="t">sources</text>
+      <path d="M102 45H114" class="lp"/><path d="M216 45H228" class="lp"/><path d="M330 45H342" class="lp"/><path d="M444 45H456" class="lp"/><path d="M558 45H570" class="lp"/>
+    </svg>
+    <figcaption>Figure 9. Roadmap phases, in order.</figcaption>
+  </figure>
+  <table>
+    <thead><tr><th style="width:17%">Phase</th><th style="width:44%">Delivers</th><th>Exit criteria</th></tr></thead>
+    <tbody>
+      <tr><td><b>1. Prove live Claude</b></td><td>Real runs on the demo incidents and the blocking scenario. An evaluation set of incidents with known causes. Clear labelling of point-in-time evidence. Cost and latency recorded in the trace.</td><td>The evaluation runs repeatably, and its results are judged good enough to continue. Measured cost per investigation is known. Refusals and errors are seen handled in real use.</td></tr>
+      <tr><td><b>2. Sign-in and roles</b></td><td>Windows authentication, AD groups mapped to four roles, attribution on feedback and reviews, an audit log. Removes the shared access code. Fixes the cross-site gap.</td><td>Each role is tested for what it can and can't do, on the UI and API. Cross-site requests are refused. Every change is attributed to a person.</td></tr>
+      <tr><td><b>3. SQL Server migration</b></td><td>Schema and data access on SQL Server, full-text search replacing FTS5, retuned similarity scoring, a data migration tool.</td><td>Golden tests pass on SQL Server, with any scoring differences reviewed and accepted. A copy of existing data migrates and verifies.</td></tr>
+      <tr><td><b>4. Windows hosting and operations</b></td><td>Install on Windows Server, service accounts, secrets handling, monitoring, backup and restore, runbook. Updated guide.</td><td>A clean install follows the written steps. A restore is rehearsed and meets its targets. Alerts fire on a forced failure.</td></tr>
+      <tr><td><b>5. Real incident intake</b></td><td>One incident tool connected, read-only, replacing the demo seed. Model access routes for the site, with an audit log of data sent.</td><td>Real incidents appear with no manual entry. A pilot team has used it on real incidents and reports on its usefulness. Security has approved what leaves the network.</td></tr>
+      <tr><td><b>6. More evidence sources</b></td><td>Further read-only MCP servers, one at a time, in the order the pilot shows matters most.</td><td>For each source: attack tests pass, the read-only guarantee is documented, and it's shown to improve investigations.</td></tr>
+    </tbody>
+  </table>
+  <div class="note"><b>Stopping point:</b> phase 1 is a real decision. If the evaluation shows that live analysis doesn't help enough, later phases should change, rather than building infrastructure around an unproven core.</div>
+</section>
+
+<section class="chapter partb" id="s13">
+  <h1>13. Target architecture</h1>
+  <div class="note plan"><b>This part is a plan. None of it is built or tested.</b> It records the direction chosen for an on-premises deployment, so that reviewers and adopters can assess it. Products are named as integration options, and their details should be confirmed at design time for each phase.</div>
+  <h2>13.1 Overview and hosting</h2>
+  <p>ResolveAI runs on one Windows Server inside the company network, using the existing Windows, Active Directory and SQL Server skills of an on-premises team.</p>
+  <figure>
+    <svg viewBox="0 0 680 400" role="img" aria-label="Target architecture">
+      <rect x="4" y="4" width="672" height="296" rx="6" class="zp"/><text x="14" y="19" class="ap">PLANNED. Company network</text>
+      <rect x="16" y="30" width="110" height="46" rx="5" class="bn"/><text x="71" y="50" text-anchor="middle" class="t">Engineers</text><text x="71" y="65" text-anchor="middle" class="s">browser, domain user</text>
+      <rect x="16" y="100" width="110" height="46" rx="5" class="bn"/><text x="71" y="120" text-anchor="middle" class="t">Active Directory</text><text x="71" y="135" text-anchor="middle" class="s">users, groups</text>
+      <rect x="160" y="26" width="320" height="192" rx="5" class="zp"/><text x="170" y="41" class="ap">Windows Server: least-privilege service account</text>
+      <rect x="172" y="50" width="296" height="48" rx="4" class="bp"/><text x="320" y="69" text-anchor="middle" class="t">ResolveAI.App: IIS or Windows service, HTTPS</text><text x="320" y="85" text-anchor="middle" class="s">Windows sign-in, four roles, audit log</text>
+      <rect x="172" y="108" width="296" height="40" rx="4" class="bx"/><text x="320" y="125" text-anchor="middle" class="t">Pipeline, validation, providers</text><text x="320" y="139" text-anchor="middle" class="s">existing code, with a model route setting per site</text>
+      <rect x="172" y="158" width="142" height="48" rx="4" class="bx"/><text x="243" y="178" text-anchor="middle" class="t">Existing MCP servers</text><text x="243" y="193" text-anchor="middle" class="s">SQL, files, deploys, metrics</text>
+      <rect x="326" y="158" width="142" height="48" rx="4" class="bp"/><text x="397" y="178" text-anchor="middle" class="t">New MCP servers</text><text x="397" y="193" text-anchor="middle" class="s">one per evidence source</text>
+      <rect x="516" y="30" width="148" height="52" rx="5" class="bp"/><text x="590" y="52" text-anchor="middle" class="t">SQL Server</text><text x="590" y="68" text-anchor="middle" class="s">app data, full-text search</text>
+      <rect x="516" y="100" width="148" height="46" rx="5" class="bn"/><text x="590" y="120" text-anchor="middle" class="t">Backup and monitoring</text><text x="590" y="135" text-anchor="middle" class="s">existing company tools</text>
+      <rect x="516" y="164" width="148" height="46" rx="5" class="bp"/><text x="590" y="184" text-anchor="middle" class="t">Outbound route</text><text x="590" y="199" text-anchor="middle" class="s">proxy or private link, audit</text>
+      <rect x="16" y="234" width="474" height="56" rx="5" class="bn"/><text x="253" y="251" text-anchor="middle" class="t">Evidence sources, read-only</text><text x="253" y="266" text-anchor="middle" class="s">incident tools, SQL Server estate, Windows and IIS logs, file logs,</text><text x="253" y="279" text-anchor="middle" class="s">observability stack, source control and CI/CD, other systems</text>
+      <path d="M126 53H170" class="lp"/><path d="M126 123C145 123 150 90 170 80" class="lp"/><path d="M468 62H514" class="lp"/><path d="M480 112H514" class="lp"/><path d="M468 128H496V187H514" class="lp"/><path d="M243 206V232" class="lp"/><path d="M397 206V232" class="lp"/>
+      <rect x="340" y="326" width="150" height="46" rx="5" class="bn"/><text x="415" y="345" text-anchor="middle" class="t">Route A: Claude API</text><text x="415" y="361" text-anchor="middle" class="s">HTTPS through the proxy</text>
+      <rect x="514" y="326" width="162" height="46" rx="5" class="bn"/><text x="595" y="345" text-anchor="middle" class="t">Route B: Bedrock or Foundry</text><text x="595" y="361" text-anchor="middle" class="s">private cloud link</text>
+      <path d="M560 210V312H415V324" class="lp"/><path d="M620 210V324" class="lp"/>
+      <text x="14" y="350" class="ap">Outside the network, chosen per site.</text><text x="14" y="364" class="s">Off entirely is also valid: recorded mode remains.</text>
+      <text x="14" y="394" class="s">Dashed amber is new. Solid purple is existing code that carries over.</text>
+    </svg>
+    <figcaption>Figure 10. Target architecture on one Windows Server. Planned.</figcaption>
+  </figure>
+  <table>
+    <thead><tr><th style="width:26%">Topic</th><th>Design</th></tr></thead>
+    <tbody>
+      <tr><td>Host</td><td>ASP.NET Core under IIS or as a Windows service, on HTTPS with a company certificate. IIS needs its WebSocket feature enabled for Blazor.</td></tr>
+      <tr><td>Service account</td><td>A dedicated low-privilege account, ideally a group managed service account. MCP servers run as children under it, with the same minimal environment as today.</td></tr>
+      <tr><td>Secrets</td><td>Stored outside source and config, for example in environment settings protected by Windows DPAPI or a company vault, and readable only by the service account.</td></tr>
+      <tr><td>Data protection keys</td><td>Persisted to a protected folder, so sessions survive restarts.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>13.2 Identity and roles</h2>
+  <p>Windows authentication signs users in automatically, and AD groups map to four roles. This replaces the shared access code: permission to spend on live runs becomes a role, and <code>Caller</code> in <code>AppService</code> carries a real identity instead of a code and a localhost flag.</p>
+  <table>
+    <thead><tr><th style="width:44%">Permission</th><th>Viewer</th><th>Investigator</th><th>Reviewer</th><th>Admin</th></tr></thead>
+    <tbody>
+      <tr><td>Read incidents, evidence and findings</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+      <tr><td>Run recorded investigation, add notes and votes</td><td></td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+      <tr><td>Run live investigation (within the daily limit)</td><td></td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+      <tr><td>Generate and edit RCA drafts</td><td></td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+      <tr><td>Record a verified root cause, mark an RCA reviewed</td><td></td><td></td><td>Yes</td><td>Yes</td></tr>
+      <tr><td>Change systems, model routes and limits; read audit log</td><td></td><td></td><td></td><td>Yes</td></tr>
+    </tbody>
+  </table>
+  <ul>
+    <li><b>Enforcement:</b> in <code>AppService</code>, so the UI and API can't differ. The API also authenticates by Windows sign-in, which closes today's cross-site gap together with anti-forgery checks.</li>
+    <li><b>Audit:</b> a new append-only table recording who did what and when, including what evidence was sent to a model.</li>
+  </ul>
+
+  <h2>13.3 Data</h2>
+  <p>SQL Server replaces SQLite, on an existing instance or a dedicated one, and connects using the service account.</p>
+  <table>
+    <thead><tr><th style="width:26%">Area</th><th>Change</th><th style="width:32%">Risk to manage</th></tr></thead>
+    <tbody>
+      <tr><td>Schema</td><td>Port the 14 tables. Text IDs and ISO time strings can move to proper types.</td><td>Code compares times as strings today, so change them together.</td></tr>
+      <tr><td>Search</td><td>SQL Server full-text search replaces FTS5.</td><td>Its rank isn't bm25, so the score formula and 35% cut-off must be retuned against known cases.</td></tr>
+      <tr><td>Data access</td><td><code>Db.cs</code> and its SQL, mostly standard. <code>LIMIT</code> and similar syntax need porting.</td><td>Golden tests catch differences.</td></tr>
+      <tr><td>Migration</td><td>A one-way tool, run once, with row counts verified.</td><td>Keep the SQLite file until verified.</td></tr>
+      <tr><td>Retention</td><td>A policy for investigations and packets, which may hold sensitive evidence.</td><td>Needs agreement with the company's data owner.</td></tr>
+      <tr><td>Separation</td><td>App data in its own database, separate from any monitored database.</td><td>The read-only login must not reach app data.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>13.4 Model access</h2>
+  <p>Claude can't run on-premises, so live analysis sends evidence outside the network. Each site chooses a route in configuration, behind the existing <code>ILlmProvider</code> layer. The rest of the pipeline doesn't change.</p>
+  <table>
+    <thead><tr><th style="width:21%">Route</th><th>How it works</th><th>Suits</th></tr></thead>
+    <tbody>
+      <tr><td><b>A. Direct API</b></td><td>HTTPS to the Claude API through the company proxy, with one allow-listed destination.</td><td>Sites allowing controlled outbound access; simplest</td></tr>
+      <tr><td><b>B. Private link</b></td><td>Claude through Amazon Bedrock or Microsoft Foundry over a private connection, under the company's cloud contract.</td><td>Sites requiring no public internet path</td></tr>
+      <tr><td><b>Off</b></td><td>No model calls. Rule-based analysis only, with all evidence gathering still working.</td><td>Sites not yet approved</td></tr>
+    </tbody>
+  </table>
+  <p><b>Controls on every route:</b> redaction before anything leaves; an audit record of each packet sent; live mode allowed per service, so sensitive ones can stay off; the daily limit; and automatic fallback to recorded mode with a clear label.</p>
+  <div class="note plan"><b>Design points for route B:</b> the C# SDK has dedicated clients for these platforms, and model IDs can differ. The <code>fallbacks: "default"</code> setting used today isn't available on Bedrock or Foundry, so refusal handling needs the SDK's client-side fallback instead. Availability of each feature must be confirmed per platform and tested, since structured output and the tool runner are both relied upon.</div>
+  <div class="note warn"><b>Decision each site must make:</b> redaction is pattern-based, so some sensitive content can leave the network. This should be an explicit, recorded approval by the site's security owner, not a default.</div>
+
+  <h2>13.5 Evidence sources</h2>
+  <p>Every source follows the same pattern as today: its own read-only MCP server, fixed tools, the same limits, and its results become cited evidence. File logs already work through the existing files server, by adding folders to its allow-list.</p>
+  <table>
+    <thead><tr><th style="width:21%">Category</th><th style="width:35%">Options</th><th>Purpose and notes</th></tr></thead>
+    <tbody>
+      <tr><td><b>Incident tools</b></td><td>ServiceNow, Jira Service Management, PagerDuty</td><td>Import real incidents to replace the demo seed. Read-only: ResolveAI never updates tickets.</td></tr>
+      <tr><td><b>Windows and SQL estate</b></td><td>Windows Event Logs, IIS logs, Performance Monitor, more SQL Server instances</td><td>Closest fit for an on-premises team. Each SQL instance needs its own reader login.</td></tr>
+      <tr><td><b>Observability</b></td><td>Splunk, Elastic, Prometheus, Grafana</td><td>Sites that centralise logs and metrics. Queries come from fixed templates, not free text.</td></tr>
+      <tr><td><b>Source control and CI/CD</b></td><td>Azure DevOps Server, GitHub Enterprise, Jenkins</td><td>Real deployment history and code changes, replacing the demo feed.</td></tr>
+      <tr><td><b>File logs</b></td><td>Existing files server</td><td>Available now. Configure allowed folders and a service account with read-only access.</td></tr>
+      <tr><td><b>Other systems</b></td><td>Message queues, Kubernetes, feature flags, HTTP probes</td><td>Added through the checklist below.</td></tr>
+    </tbody>
+  </table>
+  <h3>Checklist for adding any system</h3>
+  <ol>
+    <li>Use a read-only credential, so the source system enforces the guarantee itself.</li>
+    <li>Provide fixed, parameterised tools, never a free-form query or command.</li>
+    <li>Apply the standard limits: time window, rows, output size and timeout.</li>
+    <li>Treat its output as untrusted, and confirm that redaction covers its formats.</li>
+    <li>Add attack tests for every input a caller controls, and a test against a fake source.</li>
+    <li>Add its baseline checks, and show that it improves investigations before keeping it.</li>
+  </ol>
+
+  <h2 style="break-before:page;margin-top:0">13.6 Operations</h2>
+  <table>
+    <thead><tr><th style="width:21%">Area</th><th>Plan</th></tr></thead>
+    <tbody>
+      <tr><td>Monitoring</td><td>Health endpoint, MCP server status, run failures, model errors, spend against the limit, fed to the company's monitoring through OpenTelemetry or Windows event logs.</td></tr>
+      <tr><td>Logging</td><td>Structured application logs, without evidence content or secrets.</td></tr>
+      <tr><td>Backup</td><td>Standard SQL Server backups, plus configuration and protected keys. Recovery targets are set by the site, and restores are rehearsed.</td></tr>
+      <tr><td>Patching</td><td>A scheduled window, with a maintenance notice. Migrations apply at startup, after a backup.</td></tr>
+      <tr><td>Capacity</td><td>Each user holds a live connection and each run uses background work. To be measured in the pilot; the design expects tens of users, not thousands.</td></tr>
+    </tbody>
+  </table>
+  <h3>What choosing a single server accepts</h3>
+  <ul>
+    <li>Downtime during patching or a server failure, until it is restored.</li>
+    <li>Investigations in progress are lost on restart, and are marked failed to be run again.</li>
+    <li>Users reconnect after a restart.</li>
+  </ul>
+  <p>This is reasonable because ResolveAI supports incident response but isn't part of the production path: engineers can still investigate by hand while it's down. If it became critical, the next step would be a second server, which needs sticky sessions, shared keys, and investigations moved to a database-backed queue.</p>
+
+  <h2>13.7 Open questions</h2>
+  <p>These can only be settled with a real deployment:</p>
+  <ul>
+    <li>What accuracy from the evaluation in phase 1 is good enough to continue?</li>
+    <li>Which incident tool does the first pilot use, and how are its services mapped to log folders, databases and metrics?</li>
+    <li>Which route does the first site approve, and what must be redacted beyond today's patterns?</li>
+    <li>How long may investigations and evidence packets be retained?</li>
+    <li>IIS or Windows service, given the site's standards?</li>
+    <li>What budget should the daily live limit reflect, once phase 1 has measured the cost?</li>
+  </ul>
+</section>
+
+<section class="chapter" id="apx">
+  <h1>Appendix A. Configuration, glossary and samples</h1>
+  <h2>A.1 Environment variables (as-built)</h2>
+  <table>
+    <thead><tr><th style="width:32%">Variable</th><th style="width:21%">Default</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>ANTHROPIC_API_KEY</code></td><td>empty</td><td>Claude API key. Empty means recorded mode.</td></tr>
+      <tr><td><code>LLM_MODE</code></td><td><code>recorded</code></td><td><code>live</code> calls Claude by default, if there is a key.</td></tr>
+      <tr><td><code>CLAUDE_MODEL</code></td><td><code>claude-opus-5-5</code></td><td>Model for investigations and RCAs.</td></tr>
+      <tr><td><code>LIVE_ACCESS_CODE</code></td><td>empty</td><td>Lets a run opt into live while the default stays recorded.</td></tr>
+      <tr><td><code>LIVE_DAILY_LIMIT</code></td><td><code>20</code></td><td>Live model calls per UTC day.</td></tr>
+      <tr><td><code>DEMO_MODE</code></td><td><code>true</code></td><td>Enables demo reset.</td></tr>
+      <tr><td><code>DEMO_RESET_ANY_IP</code></td><td><code>false</code></td><td>Allows reset from any address. Docker only.</td></tr>
+      <tr><td><code>DB_PATH</code></td><td><code>data/resolveai.db</code></td><td>SQLite file, relative to the repository root.</td></tr>
+      <tr><td><code>HOST</code>, <code>API_PORT</code></td><td><code>127.0.0.1</code>, <code>8787</code></td><td>Listen address and port.</td></tr>
+      <tr><td><code>MCP_ENABLED</code></td><td><code>true</code></td><td>Start the MCP systems.</td></tr>
+      <tr><td><code>MCP_MAX_FOLLOWUP_CALLS</code></td><td><code>8</code></td><td>Follow-up calls per investigation, 0 to 20.</td></tr>
+      <tr><td><code>RESOLVEAI_MCP_CONFIG</code></td><td>empty</td><td>Config path. Otherwise <code>mcp.config.json</code>, then the example.</td></tr>
+      <tr><td><code>MSSQL_USER</code>, <code>MSSQL_PASSWORD</code></td><td>empty</td><td>SQL login, for the <code>tedious</code> driver setting only.</td></tr>
+    </tbody>
+  </table>
+  <h2>A.2 Glossary</h2>
+  <table>
+    <tbody>
+      <tr><td style="width:24%"><b>Baseline check</b></td><td>A fixed read-only check ResolveAI runs for every investigation, before any model is involved.</td></tr>
+      <tr><td><b>Circuit</b></td><td>Blazor Server's live connection between one browser page and the server.</td></tr>
+      <tr><td><b>Evidence packet</b></td><td>The bounded, redacted set of records the model may see and cite.</td></tr>
+      <tr><td><b>FTS5</b></td><td>SQLite's full-text search engine. It ranks results with bm25.</td></tr>
+      <tr><td><b>Follow-up check</b></td><td>An extra tool call chosen by Claude (live), or replayed (recorded).</td></tr>
+      <tr><td><b>Golden file</b></td><td>A recorded correct output that tests compare against.</td></tr>
+      <tr><td><b>Hypothesis</b></td><td>A candidate root cause, with citations, counter-evidence, unknowns and checks.</td></tr>
+      <tr><td><b>MCP</b></td><td>Model Context Protocol: a standard way of offering tools to a model.</td></tr>
+      <tr><td><b>RCA</b></td><td>Root cause analysis: the post-incident report.</td></tr>
+      <tr><td><b>Recorded mode</b></td><td>Runs the pipeline with written or rule-based analysis and no model.</td></tr>
+      <tr><td><b>Speculative</b></td><td>A hypothesis with no valid citation; forced to low confidence.</td></tr>
+    </tbody>
+  </table>
+  <h2>A.3 Sample evidence packet item</h2>
+<pre>{
+  "id": "log:92d294db-9e68-5532-aadd-2ad515c20866",
+  "type": "log",
+  "timestamp": "2026-10-25T09:31:00Z",
+  "source": "cdn/checkout-web",
+  "excerpt": "ERROR cdn: GET /static/app.9f2c.js 404 [signature=cdn_asset_404]"
+}</pre>
+  <h2>A.4 Sample tool result</h2>
+  <p>A <code>db_blocking</code> result from the golden test cases, shortened:</p>
+<pre>{
+  "summary": "1 blocked request(s) behind 1 head blocker(s) (session 61); longest wait 42s.",
+  "rows": [
+    { "role": "head_blocker", "session_id": 61, "status": "sleeping", "open_transaction_count": 1,
+      "program_name": "SQLCMD",
+      "last_query_text": "UPDATE dbo.Orders SET ReconciledAt = SYSUTCDATETIME() WHERE Status = N'open'" },
+    { "role": "blocked", "session_id": 72, "blocking_session_id": 61, "database_name": "ResolveAIDemo",
+      "wait_type": "LCK_M_U", "wait_ms": 42000, ... }
+  ],
+  ...
+}</pre>
+</section>
+
+</body>
+</html>
