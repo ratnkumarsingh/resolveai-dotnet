@@ -6,6 +6,8 @@ namespace ResolveAI.App;
 public sealed class AppSettings
 {
     public string? ApiKey { get; init; }
+    /// <summary>A gateway that speaks the Anthropic Messages API. Null means Anthropic's own API.</summary>
+    public string? BaseUrl { get; init; }
     /// <summary>Default mode for runs that don't ask for live.</summary>
     public string LlmMode { get; init; } = "recorded";
     public string Model { get; init; } = "claude-opus-5-5";
@@ -32,6 +34,7 @@ public sealed class AppSettings
         return new AppSettings
         {
             ApiKey = apiKey,
+            BaseUrl = NormalizeBaseUrl(Trimmed("ANTHROPIC_BASE_URL")),
             // Live mode needs a key; without one we fall back to the deterministic recorded mode.
             LlmMode = env("LLM_MODE") == "live" && apiKey is not null ? "live" : "recorded",
             Model = Trimmed("CLAUDE_MODEL") ?? "claude-opus-5-5",
@@ -45,6 +48,13 @@ public sealed class AppSettings
             McpEnabled = (env("MCP_ENABLED") ?? "true") == "true",
             MaxFollowUps = int.TryParse(Trimmed("MCP_MAX_FOLLOWUP_CALLS"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var followUps) ? Math.Clamp(followUps, 0, 20) : 8,
         };
+    }
+
+    /// <summary>The SDK appends /v1/messages itself, and gateways often show their URL ending in /v1, so that ending is removed rather than doubled.</summary>
+    private static string? NormalizeBaseUrl(string? url)
+    {
+        var trimmed = url?.TrimEnd('/');
+        return trimmed is not null && trimmed.EndsWith("/v1", StringComparison.OrdinalIgnoreCase) ? trimmed[..^3] : trimmed;
     }
 
     /// <summary>Reads KEY=value lines into the environment. A variable that is already set wins, so the real environment can override the file.</summary>

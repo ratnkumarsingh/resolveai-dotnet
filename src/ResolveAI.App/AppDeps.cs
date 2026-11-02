@@ -16,7 +16,7 @@ public sealed record AppDeps(Db Db, Providers Providers, Systems? Systems, AppSe
         // First run: start with the demo dataset so the app is never empty.
         if (db.Get<int>("SELECT COUNT(*) FROM incidents") == 0) Seed.Demo(db);
 
-        var providers = new Providers(new RecordedProvider(), settings.ApiKey is not null ? new ClaudeProvider(settings.ApiKey, settings.Model) : null);
+        var providers = new Providers(new RecordedProvider(), settings.ApiKey is not null ? new ClaudeProvider(settings.ApiKey, settings.Model, baseUrl: settings.BaseUrl) : null);
 
         // One MCP server per system. A system that fails to start is shown as an error on the Systems page; it never stops the app.
         Systems? systems = null;

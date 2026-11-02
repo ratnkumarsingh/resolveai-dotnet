@@ -240,6 +240,41 @@ public class ClaudeProviderTests
         Assert.Contains("server-side-fallback-2026-07-01", headers);
         // The C# SDK documents ApiKey as being sent this way.
         Assert.Contains("Authorization: Bearer test-key", headers);
+        Assert.Equal("api.anthropic.com", fake.Raw[0].RequestUri!.Host);
+    }
+
+    [Fact]
+    public async Task A_gateway_gets_the_same_request_without_anthropics_server_side_fallback()
+    {
+        var fake = new FakeClaude(_ => (HttpStatusCode.OK, Text("end_turn", ValidOutput)));
+        var provider = new ClaudeProvider("test-key", "anthropic/claude-opus-4.8", new HttpClient(fake), "https://gateway.example");
+
+        var result = await provider.Investigate(Packet(), default);
+
+        Assert.Equal("t", result.Output.Hypotheses[0].Title);
+        Assert.Equal("gateway.example", fake.Raw[0].RequestUri!.Host);
+        Assert.Equal("/v1/messages", fake.Raw[0].RequestUri!.AbsolutePath);
+
+        var sent = fake.Requests[0];
+        Assert.Equal("anthropic/claude-opus-4.8", sent["model"]!.GetValue<string>());
+        Assert.Equal("json_schema", sent["output_config"]!["format"]!["type"]!.GetValue<string>());
+        Assert.Null(sent["fallbacks"]);
+        var headers = string.Join(Environment.NewLine, fake.Raw[0].Headers.Select(h => $"{h.Key}: {string.Join(",", h.Value)}"));
+        Assert.DoesNotContain("server-side-fallback", headers);
+        Assert.Contains("Authorization: Bearer test-key", headers);
+    }
+
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData("  ", null)]
+    [InlineData("https://api.aicredits.in", "https://api.aicredits.in")]
+    [InlineData("https://api.aicredits.in/", "https://api.aicredits.in")]
+    [InlineData("https://api.aicredits.in/v1", "https://api.aicredits.in")]
+    [InlineData("https://api.aicredits.in/v1/", "https://api.aicredits.in")]
+    public void The_base_url_setting_loses_any_ending_the_SDK_adds_itself(string? configured, string? expected)
+    {
+        var settings = ResolveAI.App.AppSettings.Load(key => key == "ANTHROPIC_BASE_URL" ? configured : null);
+        Assert.Equal(expected, settings.BaseUrl);
     }
 
     [Fact]

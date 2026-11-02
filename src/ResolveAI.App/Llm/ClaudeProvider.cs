@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Anthropic;
+using Anthropic.Core;
 using Anthropic.Exceptions;
 using Anthropic.Helpers.Beta;
 using Anthropic.Models.Beta.Messages;
@@ -8,11 +9,12 @@ using ResolveAI.Contracts;
 namespace ResolveAI.App.Llm;
 
 /// <summary>Live provider: calls Claude server-side with a structured-output schema.</summary>
-public sealed class ClaudeProvider(string apiKey, string model, HttpClient? http = null) : ILlmProvider
+/// <param name="baseUrl">A gateway that speaks the Anthropic Messages API, in place of Anthropic's own API.</param>
+public sealed class ClaudeProvider(string apiKey, string model, HttpClient? http = null, string? baseUrl = null) : ILlmProvider
 {
     private readonly AnthropicClient _client = http is null
-        ? new() { ApiKey = apiKey, MaxRetries = 2, Timeout = TimeSpan.FromSeconds(90) }
-        : new() { ApiKey = apiKey, MaxRetries = 0, Timeout = TimeSpan.FromSeconds(90), HttpClient = http };
+        ? new() { ApiKey = apiKey, BaseUrl = baseUrl ?? EnvironmentUrl.Production, MaxRetries = 2, Timeout = TimeSpan.FromSeconds(90) }
+        : new() { ApiKey = apiKey, BaseUrl = baseUrl ?? EnvironmentUrl.Production, MaxRetries = 0, Timeout = TimeSpan.FromSeconds(90), HttpClient = http };
 
     public string Mode => "live";
     public string? Model => model;
@@ -87,13 +89,10 @@ public sealed class ClaudeProvider(string apiKey, string model, HttpClient? http
         BetaMessage res;
         try
         {
-            res = await _client.Beta.Messages.Create(new MessageCreateParams
+            var parameters = new MessageCreateParams
             {
                 Model = model,
                 MaxTokens = 16000,
-                // Route safety-classifier refusals to a fallback model chosen server-side.
-                Betas = ["server-side-fallback-2026-07-01"],
-                Fallbacks = new Default(),
                 OutputConfig = new BetaOutputConfig
                 {
                     Effort = Effort.Medium,
@@ -101,7 +100,11 @@ public sealed class ClaudeProvider(string apiKey, string model, HttpClient? http
                 },
                 System = system,
                 Messages = [new BetaUserMessageParam { Content = content }],
-            }, ct);
+            };
+            // Route safety-classifier refusals to a fallback model chosen server-side. This is a feature of
+            // Anthropic's own API, so it isn't sent to a gateway; there a refusal is reported as one.
+            if (baseUrl is null) parameters = parameters with { Betas = ["server-side-fallback-2026-07-01"], Fallbacks = new Default() };
+            res = await _client.Beta.Messages.Create(parameters, ct);
         }
         catch (Exception err) when (err is not OperationCanceledException)
         {

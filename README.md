@@ -128,7 +128,8 @@ Copy `.env.example` to `.env`. All variables are server-side; the UI runs on the
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `ANTHROPIC_API_KEY` | empty | Claude API key. Empty means recorded mode. |
+| `ANTHROPIC_API_KEY` | empty | Claude API key, or your gateway's key. Empty means recorded mode. |
+| `ANTHROPIC_BASE_URL` | empty | A gateway that speaks the Anthropic Messages API. Empty means Anthropic's own API. See [Using a gateway](#using-a-gateway). |
 | `LLM_MODE` | `recorded` | `live` calls Claude; `recorded` replays fixtures and rules offline. |
 | `CLAUDE_MODEL` | `claude-opus-5-5` | Model for investigations and RCA drafts. |
 | `LIVE_ACCESS_CODE` | empty | With an API key, lets a run opt into live Claude while `LLM_MODE` stays `recorded`. The browser sends it from Settings → Access code. |
@@ -148,6 +149,22 @@ Copy `.env.example` to `.env`. All variables are server-side; the UI runs on the
 - **recorded** (default): deterministic and runs without network access. INC-1042 replays a recorded analysis; other incidents get a rule-based analysis built from the same evidence packet. Both go through the same server-side validation as live output. Use this mode for a demo that must behave the same way every time.
 - **live on request** (recommended for shared demos): keep `LLM_MODE=recorded`, set `ANTHROPIC_API_KEY` and `LIVE_ACCESS_CODE`. Everyone gets recorded mode; a person with the code can tick *Use live Claude* on an incident. An RCA is drafted in the same mode as its investigation. Live calls are capped by `LIVE_DAILY_LIMIT`.
 - **live**: the server calls Claude through the official `Anthropic` .NET SDK with structured JSON output (`output_config.format`, effort `medium`) and server-side refusal fallback (`fallbacks: "default"`). The response is then validated against the evidence packet.
+
+### Using a gateway
+
+To call Claude through a gateway instead of Anthropic's own API, set these in `.env`:
+
+```
+ANTHROPIC_API_KEY=your-gateway-key
+ANTHROPIC_BASE_URL=https://api.aicredits.in
+CLAUDE_MODEL=anthropic/claude-opus-4.8
+LLM_MODE=live
+```
+
+- **The gateway must speak the Anthropic Messages API.** An OpenAI-compatible endpoint alone won't work. A base URL ending in `/v1` is accepted, and the ending is removed because the SDK adds it.
+- **Pick a model the gateway offers on that API.** With AICredits, `supported_apis` in `https://api.aicredits.in/api/models` must include `messages`. The newest Claude models there currently list only `chat_completions`, so they won't work.
+- **Refusal fallback is off,** because it is a feature of Anthropic's own API. A refused request is reported as an error.
+- **Your prompts pass through that service,** under its own privacy terms. Check them before sending anything other than demo data.
 
 ## Demo script (3–4 minutes)
 
