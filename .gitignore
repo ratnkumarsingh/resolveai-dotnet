@@ -15,3 +15,4 @@ playwright-report/
 bin/
 obj/
 tools/css/.cache/
+/.vs
