@@ -6,13 +6,58 @@ ResolveAI pulls an incident's logs, deployments, metrics, runbooks and past inci
 
 ## Quick start
 
+### What you need
+
+**To run the app, you only need the [.NET 10 SDK](https://dotnet.microsoft.com/download).** Check it with `dotnet --version`, which should print `10.x`. You also need Git to clone the repository, or you can download the ZIP from GitHub.
+
+Everything else is handled for you: NuGet packages restore automatically, SQLite is built in, so there is no database server to install, and the compiled CSS is committed, so you don't need Node.
+
+**Optional, only for the feature you want:**
+
+| Software | Needed for |
+| --- | --- |
+| [Docker Desktop](https://www.docker.com/products/docker-desktop/) | [Running in a container](#run-in-docker-local-deployment) instead of with `dotnet run` |
+| Anthropic API key | [Live Claude analysis](#llm-modes); without one, the app replays recorded results for free |
+| SQL Server and `sqlcmd` | [Live database checks](#systems-the-agent-can-check-mcp) for INC-1046 (off by default) |
+| Git at run time | Commit details in deploy checks, for services with a `repo` set in `mcp.config.json` |
+| PowerShell 7 and Chromium | [Browser tests](#tests) |
+| Node.js | Regenerating the CSS after changing classes |
+| Python with `pypdf`, and Chrome | Rebuilding the architecture PDF (`docs/design/build_pdf.py`) |
+| Python or the `sqlite3` tool | Loading the optional sample data below |
+
+### Run it
+
 ```bash
-dotnet run --project src/ResolveAI.App      # the app and API on http://127.0.0.1:8787
+git clone https://github.com/ratnkumarsingh/resolveai-dotnet.git
+cd resolveai-dotnet
+dotnet run --project src/ResolveAI.App
 ```
 
-Open http://localhost:8787 and pick **INC-1042**. An empty database is seeded on first start.
+Open http://localhost:8787 and pick **INC-1042**. The first start creates and seeds the database at `data/resolveai.db`, so you don't need to run any SQL script. Press Ctrl+C to stop the app; your data is kept.
 
-Requires the [.NET 10 SDK](https://dotnet.microsoft.com/download). Nothing else: the UI runs on the server (Blazor Server on ASP.NET Core) and its CSS is committed.
+The UI runs on the server (Blazor Server on ASP.NET Core), so there is nothing separate to start.
+
+### Optional configuration
+
+The app runs without any of these files:
+
+- **Settings:** copy `.env.example` to `.env`, for example to add an API key. See [Environment](#environment).
+- **Systems:** copy `mcp.config.example.json` to `mcp.config.json` to change which log folders, repos and databases are checked, or to turn on SQL Server. See [Systems the agent can check](#systems-the-agent-can-check-mcp).
+
+### Optional sample data
+
+`database/resolveai.sql` builds a database that already has sample activity in it: investigations, a reviewed RCA and feedback. It is a **SQLite** script, so it won't run on SQL Server. Load it into a new file, then point the app at that file:
+
+```powershell
+mkdir data    # only if the app has never been started here
+python -c "import sqlite3; c = sqlite3.connect('data/resolveai-test.db'); c.executescript(open('database/resolveai.sql', encoding='utf-8').read())"
+$env:DB_PATH = 'data/resolveai-test.db'; dotnet run --project src/ResolveAI.App
+```
+
+### Common problems
+
+- **Port 8787 is already in use:** set a different port for this run with `$env:API_PORT = '8788'` in PowerShell (`API_PORT=8788` in bash), or set `API_PORT` in `.env`.
+- **A system shows *Not working* on the Systems page:** the message on its card gives the reason. The rest of the app keeps working. SQL Server shows *Turned off* until you enable it in `mcp.config.json`.
 
 ## Run in Docker (local deployment)
 
